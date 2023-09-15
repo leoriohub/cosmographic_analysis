@@ -32,11 +32,23 @@ def map_statistics(h0: np.ndarray, q0: np.ndarray, delta_h0_data_max: np.ndarray
     return statistics
 
 
-def mc_statistics(delta_h0_iso_max: np.ndarray, delta_q0_iso_max: np.ndarray, delta_h0_lcdm_max: np.ndarray, delta_q0_lcdm_max: np.ndarray, delta_h0_data_max: np.ndarray, delta_q0_data_max: np.ndarray) -> None:
+def mc_statistics(maximum_anisotropy_data: np.ndarray, maximum_anisotropy_mc: np.ndarray) -> list :
     """
     Calculate and print Monte Carlo statistics.
 
+    Args: Receives an array of maximum anisotropy values for LCDM and ISO iterations.
+    
+    Returns: Returns a list of pvalues.
+    
     """
+    
+    delta_h0_data_max = maximum_anisotropy_data[0]
+    delta_q0_data_max = maximum_anisotropy_data[1]
+
+    delta_h0_lcdm_max = maximum_anisotropy_mc[0]
+    delta_q0_lcdm_max = maximum_anisotropy_mc[1]
+    delta_h0_iso_max = maximum_anisotropy_mc[2]
+    delta_q0_iso_max = maximum_anisotropy_mc[3]
 
     repetitions = len(delta_h0_lcdm_max)
 
@@ -59,3 +71,8 @@ def mc_statistics(delta_h0_iso_max: np.ndarray, delta_q0_iso_max: np.ndarray, de
     print(f"La desviación estándar de delta_q0_max (ISO) es = {np.std(delta_q0_iso_max)}\n")
     print(f"La desviación estándar de delta_h0_max (LCDM) es = {np.std(delta_h0_lcdm_max)}")
     print(f"La desviación estándar de delta_q0_max (LCDM) es = {np.std(delta_q0_lcdm_max)}")
+    
+    p_values = [p_h0_iso_max, p_q0_iso_max, p_h0_lcdm_max, p_q0_lcdm_max]
+
+    return p_values
+    
