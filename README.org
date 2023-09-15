@@ -11,20 +11,16 @@ This repo contains all the code to analyze the Pantheon+ data set through a cosm
 * How to run
 
 Just download all the files inside the repo or alternatively use git clone.
+
 #+begin_src
 git clone https://github.com/leoriohub/cosmographic_analysis.git
+#+end_src
 
 The code must be ran from main.ipynb notebook.
-#+end_src
 
 * Dependencies
 
 There are some python libraries needed, they are all available on pip.
 #+begin_src
-pip install scipy
-pip install healpy
-pip install numpy
-pip install pandas
-pip install tqdm
-pip install multiprocessing
+pip install scipy healpy numpy pandas multiprocessing
 #+end_src
