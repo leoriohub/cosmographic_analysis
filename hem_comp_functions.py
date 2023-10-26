@@ -80,6 +80,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
     h0u = chi2umin.x[0]
+    h0u_err = chi2umin.hess_inv([1])[0] # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
 
     def chi2dh0(theta):
         """
@@ -105,7 +106,8 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
     h0d = chi2dmin.x[0]
-    return h0u, h0d  # type: Tuple[float, float]
+    h0d_err = chi2dmin.hess_inv([1])[0] # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    return h0u, h0d, h0u_err, h0d_err  # type: Tuple[float, float]
 
 
 # Hemispheric comparison implementation for q0.
@@ -183,6 +185,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
     # Minimize chi2uq0 function to find q0u
     chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
     q0u = chi2umin.x[0]
+    q0u_err = chi2umin.hess_inv([1])[0]# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
 
     def chi2dq0(theta):
         """
@@ -209,7 +212,8 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
     q0d = chi2dmin.x[0]
-    return q0u, q0d  # type: Tuple[float, float]
+    q0d_err = chi2dmin.hess_inv([1])[0]# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    return q0u, q0d, q0u_err, q0d_err  # type: Tuple[float, float]
 
 
 # Parallel mapping implementation.
@@ -234,11 +238,11 @@ def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hosty
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays representing the calculated hemispherical maps.
     """
-    # Your implementation here
-    h0u_aux, h0d_aux = hem_h0(healpix_vec, v1, r1, hostyn, cov_mat, q0f)
-    q0u_aux, q0d_aux = hem_q0(healpix_vec, v1, r1, hostyn, cov_mat, h0f)
 
-    return h0u_aux, h0d_aux, q0u_aux, q0d_aux
+    h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux = hem_h0(healpix_vec, v1, r1, hostyn, cov_mat, q0f)
+    q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux = hem_q0(healpix_vec, v1, r1, hostyn, cov_mat, h0f)
+
+    return h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux, q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux
 
 # Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
@@ -267,6 +271,9 @@ def exec_map(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: n
         results_map = list(
             tqdm(pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
 
-    h0u, h0d, q0u, q0d = zip(*results_map)
-
-    return np.array(h0u), np.array(h0d), np.array(q0u), np.array(q0d)
+    h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
+    
+    results_h0 = (h0u, h0d, h0u_err, h0d_err)
+    results_q0 = (q0u, q0d, q0u_err, q0d_err)
+    
+    return results_h0, results_q0
