@@ -80,7 +80,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
     h0u = chi2umin.x[0]
-    h0u_err = chi2umin.hess_inv([1])[0] # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    h0u_err = np.sqrt(chi2umin.hess_inv([1])[0]) # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
 
     def chi2dh0(theta):
         """
@@ -106,7 +106,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
     h0d = chi2dmin.x[0]
-    h0d_err = chi2dmin.hess_inv([1])[0] # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    h0d_err = np.sqrt(chi2dmin.hess_inv([1])[0]) # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
     return h0u, h0d, h0u_err, h0d_err  # type: Tuple[float, float]
 
 
@@ -185,7 +185,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
     # Minimize chi2uq0 function to find q0u
     chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
     q0u = chi2umin.x[0]
-    q0u_err = chi2umin.hess_inv([1])[0]# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0]) # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
 
     def chi2dq0(theta):
         """
@@ -212,14 +212,13 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
     q0d = chi2dmin.x[0]
-    q0d_err = chi2dmin.hess_inv([1])[0]# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
     return q0u, q0d, q0u_err, q0d_err  # type: Tuple[float, float]
 
 
 # Parallel mapping implementation.
 
-# Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
-
+# Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
 def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.bool_, cov_mat: np.ndarray, h0f: float, q0f: float):
     """
@@ -244,12 +243,12 @@ def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hosty
 
     return h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux, q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux
 
-# Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
+# Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
 
 def exec_map(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.bool_, cov_mat: np.ndarray, h0f: float, q0f: float):
     """
-    Execute the calculation of multiple hemispherical maps.
+    Execute the calculation of multiple hemispherical maps using the function multi_hem_map.
 
     Args:
         healpix_vecs (np.ndarray): List of vectors for each pixel in the healpix pixelation scheme.
