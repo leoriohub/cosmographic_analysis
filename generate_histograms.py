@@ -9,8 +9,8 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
         Parameters:
             - data_h0 (list): A list containing the h0 data and the data's max isotropy value.
             - data_q0 (list): A list containing the q0 data and the data's max isotropy value.
-            - x_gauss (list): A list of x values for the Gaussian fit.
-            - y_gauss (list): A list of y values for the Gaussian fit.
+            - x_gauss (list): A list of x values for the Gaussian fit to be plotted.
+            - y_gauss (list): A list of y values for the Gaussian fit to be plotted.
             - filename (str, optional): The name of the file to save the plot. Defaults to None.
             - titlemarker (str, optional): The title marker for the plot. Defaults to 'ISO'.
 
@@ -114,6 +114,17 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
 
     
 def plot_both_histograms(data_h0: np.ndarray, data_q0: np.ndarray, filename = None) -> None:
+    """
+    This function plots both LCDM and ISO histograms in the same figure. It takes in two arrays, `data_h0` and `data_q0`. The function also accepts an optional `filename` parameter to save the plot as an image file.
+
+    Parameters:
+        - data_h0 (np.ndarray): An array containing the maximum h0 anisotropy for ISO, LCDM and the original data.
+        - data_q0 (np.ndarray): An array containing the maximum q0 anisotropy for ISO, LCDM and the original data.
+        - filename (str, optional): The name of the file to save the plot as. Defaults to None.
+
+    Returns:
+        None
+    """
 
    
     delta_h0_iso_max = data_h0[0]
@@ -152,6 +163,7 @@ def plot_both_histograms(data_h0: np.ndarray, data_q0: np.ndarray, filename = No
     # Set the title and adjust the layout
     # hist2.suptitle(rf'{prefix_name} $Δh_{{\mathrm{{max}}}}$ and $Δq_{{\mathrm{{max}}}}$ histograms for LCDM and ISO distributions')
     plt.tight_layout()
-
-    # plt.savefig(f'histograms/{prefix_name}[BOTH](hf={h0f}_qf={q0f})({repetitions})_rep_({zup}>z>{zdown}).png')
+    
+    if filename != None :
+        plt.savefig(f'histograms/{filename}')
     plt.show()   
