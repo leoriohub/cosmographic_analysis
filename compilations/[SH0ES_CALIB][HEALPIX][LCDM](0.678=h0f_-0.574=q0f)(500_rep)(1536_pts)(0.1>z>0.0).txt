@@ -1,4 +1,4 @@
-# [SH0ES_CALIB][HEALPIX] This is the data for LCDM distribution with new set of data for each repetition
+#[SH0ES_CALIB][HEALPIX] This is the data for LCDM distribution with new set of data for each repetition
 # 500 repetitions, 1536 points, q0f= -0.574 h0f= 0.678
 # 
 # delta_h0_lcdm_max            delta_q0_lcdm_max
