@@ -2,7 +2,7 @@
 #+STARTUP: showall
 
 
-This repo contains all the code to analyze the Pantheon+ data set through a cosmographic approach.
+This repo contains all the code for the paper referenced paper.
 
 * Table of Contents :toc:
 - [[#how-to-run][How to run]]
@@ -24,3 +24,9 @@ There are some python libraries needed, they are all available on pip.
 #+begin_src
 pip install scipy healpy numpy pandas multiprocessing
 #+end_src
+
+* Main file
+
+The code should be run from the jupyter notebook called *main.ipynb*. In this file, one can generate Hubble-maps and q-maps by calling the custom functions defined in all the _.py_ files.
+
+This file is properly commented so one can understand what every custom function is doing in general. For details on one particular function, refer to the corresponding _.py_ file.
