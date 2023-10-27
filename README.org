@@ -27,6 +27,6 @@ pip install scipy healpy numpy pandas multiprocessing
 
 * Main file
 
-The code should be run from the jupyter notebook called *main.ipynb*. In this file, one can generate Hubble-maps and q-maps by calling the custom functions defined in all the _.py_ files.
+The code should be run from the jupyter notebook called *main.ipynb*. In this file, one can generate Hubble-maps and q-maps by calling the custom functions defined in all the /.py/ modules.
 
-This file is properly commented so one can understand what every custom function is doing in general. For details on one particular function, refer to the corresponding _.py_ file.
+This file is properly commented so one can understand what every custom function is doing in general. For details on one particular function, refer to the corresponding /.py/ module.
