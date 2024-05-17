@@ -1,9 +1,7 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import healpy as hp
-from typing import List
 
-def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray, q0: np.ndarray, h0f: float, q0f: float) -> None:
+def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray, q0: np.ndarray) -> None:
     """
     Generate h0 and q0 maps based on the best fit values and the given healpix symmetry axes.
 
@@ -19,8 +17,6 @@ def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray,
         None
     """
 
-    #Number of sources
-    n_sources = len(theta)
     #Number of pixels for a given nside
     npix = hp.nside2npix(nside)
     #Indices of pixels

@@ -17,8 +17,34 @@ def get_healpix_vectors(nside: int) -> np.ndarray:
     npix = int(hp.nside2npix(nside) / 2)
     pixel_indices = np.arange(npix)
 
-    # Convert pixel indices to unit vectors
     vectors = [hp.pix2vec(nside, idx) for idx in pixel_indices]
     vectors = np.array(vectors)
 
     return vectors
+
+
+def DecRa2Cartesian(dec, ra):
+    """
+    Convert Declination (dec) and Right Ascension (ra) to Cartesian coordinates*.
+    
+    * First convert declination and right ascension to regular spherical coordinates and then into Cartesian.
+    
+    Args:
+        dec (float): Declination angle in degrees.
+        ra (float): Right Ascension angle in degrees.
+        
+    Returns:
+        numpy.ndarray: Array containing the Cartesian coordinates [x, y, z].
+    """
+
+    dec_rad = np.radians(dec)
+    ra_rad = np.radians(ra)
+
+    theta = np.pi/2 - dec_rad
+    phi = ra_rad
+
+    x = np.sin(theta)*np.cos(phi)
+    y = np.sin(theta)*np.sin(phi)
+    z = np.cos(theta)
+
+    return np.column_stack([x, y, z])

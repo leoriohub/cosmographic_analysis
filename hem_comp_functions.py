@@ -1,9 +1,9 @@
-import numpy as np
-import pandas as pd
+from multiprocessing import Pool
 from typing import Tuple
 from scipy.optimize import minimize
-from multiprocessing import Pool
 from tqdm import tqdm
+import pandas as pd
+import numpy as np
 
 # import distance modulus from cosmology.py
 from cosmology import mu
@@ -107,7 +107,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
     chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
     h0d = chi2dmin.x[0]
     h0d_err = np.sqrt(chi2dmin.hess_inv([1])[0]) # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
-    return h0u, h0d, h0u_err, h0d_err  # type: Tuple[float, float]
+    return h0u, h0d, h0u_err, h0d_err  #
 
 
 # Hemispheric comparison implementation for q0.
@@ -213,7 +213,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
     chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
     q0d = chi2dmin.x[0]
     q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])# error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
-    return q0u, q0d, q0u_err, q0d_err  # type: Tuple[float, float]
+    return q0u, q0d, q0u_err, q0d_err  
 
 
 # Parallel mapping implementation.
@@ -271,8 +271,8 @@ def exec_map(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: n
             tqdm(pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
-    
+  
     results_h0 = (h0u, h0d, h0u_err, h0d_err)
     results_q0 = (q0u, q0d, q0u_err, q0d_err)
-    
+
     return results_h0, results_q0
