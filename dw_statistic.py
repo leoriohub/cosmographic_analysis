@@ -1,9 +1,4 @@
-from multiprocessing import Pool
 from typing import Tuple
-from scipy.optimize import minimize
-from tqdm import tqdm
-from linalg import cholesky
-import pandas as pd
 import numpy as np
 
 # import distance modulus from cosmology.py
@@ -11,9 +6,16 @@ from cosmology import mu
 
 
 def obtain_dw_statistic(healpix_dir: np.ndarray, datos: Tuple) -> float:
-    
+    """
+    Calculate the dw statistic for a given healpix direction.
+
+    Args:
+        healpix_dir (np.ndarray):  3D position vector for a given healpix pixel.
+        datos (Tuple): Tuple containing data arrays.
+   """
+
     v1, r1, hostyn, cov_mat, q0f, h0f = datos
-    
+
     cos_angle = np.dot(v1, healpix_dir)
 
     up_indices = cos_angle >= 0
@@ -32,12 +34,13 @@ def obtain_dw_statistic(healpix_dir: np.ndarray, datos: Tuple) -> float:
     down_hostyn = down_hostyn.astype(bool)
 
     ############ COV MATRIX ############
-    newcovmatu = cov_mat.iloc[upi, upi].values
-    cholesky_up = cholesky(newcovmatu)
+    ############ TO BE IMPLEMENTED #####
 
-    newcovmatd = cov_mat.iloc[downi, downi].values
-    cholesky_down = cholesky(newcovmatd)
-    #################
+    # cholesky_up = cholesky(newcovmatu)
+
+    # cholesky_down = cholesky(newcovmatd)
+
+    ####################################
 
     mu_sh0es_up = up_data[:, 5]
     muceph_up = up_data[:, 7]
@@ -55,5 +58,10 @@ def obtain_dw_statistic(healpix_dir: np.ndarray, datos: Tuple) -> float:
     resid_down[down_hostyn == 1] = mu_sh0es_down[down_hostyn == 1] - muceph_down[down_hostyn == 1]
     resid_down[down_hostyn == 0] = mu_sh0es_down[down_hostyn == 0] - mu_model_down[down_hostyn == 0]
 
+    diff_up = np.diff(resid_up)
+    diff_down = np.diff(resid_down)
 
-    return dw_statistic
+    dw_up = np.sum(diff_up**2)/np.sum(resid_up**2)
+    dw_down = np.sum(diff_down**2)/np.sum(resid_down**2)
+
+    return dw_up, dw_down
