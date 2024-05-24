@@ -4,10 +4,8 @@ from scipy.optimize import minimize
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
-
 # import distance modulus from cosmology.py
 from cosmology import mu
-
 
 def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray,
            cov_mat: pd.DataFrame, q0f: float) -> Tuple[float, float]:
@@ -75,7 +73,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - \
             mu_model_up[hostyn_up == 0]
 
-        Ar = np.dot(resid_up, np.dot(inv_newcovu, resid_up))
+        np.dot(resid_up, np.dot(inv_newcovu, resid_up))
         return Ar
 
     chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
