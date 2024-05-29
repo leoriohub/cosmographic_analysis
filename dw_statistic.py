@@ -4,7 +4,7 @@ import numpy as np
 # import distance modulus from cosmology.py
 from cosmology import mu
 
-def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple) -> Tuple[float, float]:
+def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
     """
     Calculate the dw statistic for a given healpix direction.
 
@@ -81,7 +81,7 @@ def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[float, float]:
     dw_downs = []
 
     for healpix_dir in healpix_dirs:
-        dw_up, dw_down = dw_statistic(healpix_dir, datos)
+        dw_up, dw_down = hemispheric_dw(healpix_dir, datos)
         dw_ups.append(dw_up)
         dw_downs.append(dw_down)
 
