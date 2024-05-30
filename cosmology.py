@@ -12,7 +12,7 @@ def dl(z: float, h0: float, q0: float) -> float:
         float: The luminous distance.
     '''
     y = z / (z + 1.0)
-    return (3000.0 / h0) * (y + (3.0 - q0) * np.power(y, 2) / 2.0)
+    return (2997.92458 / h0) * (y + (3.0 - q0) * np.power(y, 2) / 2.0)
 
 def mu(z: float, h0: float, q0: float) -> float:
     '''Calculate the distance modulus prediction.
