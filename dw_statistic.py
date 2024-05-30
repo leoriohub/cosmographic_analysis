@@ -49,10 +49,12 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
 
     # Calculate residuals
     resid_up = np.zeros(len(up_data))
+
     resid_up[up_hostyn] = mu_sh0es_up[up_hostyn] - muceph_up[up_hostyn]
     resid_up[~up_hostyn] = mu_sh0es_up[~up_hostyn] - mu_model_up[~up_hostyn]
 
     resid_down = np.zeros(len(down_data))
+
     resid_down[down_hostyn] = mu_sh0es_down[down_hostyn] - muceph_down[down_hostyn]
     resid_down[~down_hostyn] = mu_sh0es_down[~down_hostyn] - mu_model_down[~down_hostyn]
 
