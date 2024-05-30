@@ -65,7 +65,7 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
 
     return dw_up, dw_down
 
-def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[float, float]:
+def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calculate the total dw statistic for all healpix directions.
 
@@ -85,7 +85,7 @@ def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[float, float]:
         dw_ups.append(dw_up)
         dw_downs.append(dw_down)
 
-    total_dw_up = np.sum(dw_ups)
-    total_dw_down = np.sum(dw_downs)
+    dw_ups = np.array(dw_ups)
+    dw_downs = np.array(dw_downs)
 
-    return total_dw_up, total_dw_down
+    return dw_ups, dw_downs
