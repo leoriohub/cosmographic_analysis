@@ -69,10 +69,8 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         mu_model_up = np.array([mu(zi, h0, q0f) for zi in z_up])
 
         resid_up = np.zeros(len(up))
-        resid_up[hostyn_up == 1] = mu_sh0es_up[hostyn_up == 1] - \
-            muceph_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - \
-            mu_model_up[hostyn_up == 0]
+        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
+        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
 
         Ar = np.dot(resid_up, np.dot(inv_newcovu, resid_up))
         return Ar
@@ -95,10 +93,8 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         mu_model_down = np.array([mu(zi, h0, q0f) for zi in z_down])
 
         resid_down = np.zeros(len(down))
-        resid_down[hostyn_down == 1] = mu_sh0es_down[hostyn_down ==
-                                                     1] - muceph_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down ==
-                                                     0] - mu_model_down[hostyn_down == 0]
+        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
+        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down ==0] - mu_model_down[hostyn_down == 0]
 
         Ar = np.dot(resid_down, np.dot(inv_newcovd, resid_down))
         return Ar
@@ -173,10 +169,8 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         mu_model_up = np.array([mu(zi, h0f, q0) for zi in z_up])
 
         resid_up = np.zeros(len(datos_sne_up))
-        resid_up[hostyn_up == 1] = mu_sh0es_up[hostyn_up == 1] - \
-            muceph_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - \
-            mu_model_up[hostyn_up == 0]
+        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
+        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
 
         Ar = np.dot(resid_up, np.dot(inv_newcovu, resid_up))
         return Ar
@@ -201,10 +195,8 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         mu_model_down = np.array([mu(zi, h0f, q0) for zi in z_down])
 
         resid_down = np.zeros(len(datos_sne_down))
-        resid_down[hostyn_down == 1] = mu_sh0es_down[hostyn_down ==
-                                                     1] - muceph_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down ==
-                                                     0] - mu_model_down[hostyn_down == 0]
+        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
+        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
 
         Ar = np.dot(resid_down, np.dot(inv_newcovd, resid_down))
         return Ar
