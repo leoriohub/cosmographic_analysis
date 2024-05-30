@@ -9,7 +9,7 @@ from cosmology import mu
 
 
 def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray,
-           cov_mat: pd.DataFrame, q0f: float) -> Tuple[float, float]:
+           cov_mat: pd.DataFrame, q0f: float) -> Tuple[float, float, float, float]:
     """
     Calculate h0u and h0d based on the provided input.
 
@@ -22,7 +22,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         q0f (float): q0f value.
 
     Returns:
-        Tuple[float, float]: Tuple containing h0u and h0d.
+        Tuple[float, float, float, float]containing h0u and h0d.
     """
 
     dot_products = np.dot(v1, healpix_dirs)
@@ -112,7 +112,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 # Hemispheric comparison implementation for q0.
 
 def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray,
-           cov_mat: pd.DataFrame, h0f: float) -> Tuple[float, float]:
+           cov_mat: pd.DataFrame, h0f: float) -> Tuple[float, float, float, float]:
     """
     Calculate q0u and q0d values based on the given inputs.
 
@@ -125,7 +125,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
         h0f (float): Value of h0f.
 
     Returns:
-        Tuple[float, float]: Tuple containing q0u and q0d values.
+        Tuple[float, float,float, float]containing q0u and q0d values.
     """
 
     # Calculate dot products
@@ -219,7 +219,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
 # Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
-def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.bool_, cov_mat: np.ndarray, h0f: float, q0f: float):
+def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray, cov_mat: pd.DataFrame, h0f: float, q0f: float):
     """
     Calculate multiple hemispherical maps.
 
