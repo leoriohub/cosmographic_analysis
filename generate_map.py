@@ -1,7 +1,7 @@
 import numpy as np
 import healpy as hp
 
-def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray, q0: np.ndarray) -> None:
+def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray, q0: np.ndarray) -> tuple:
     """
     Generate h0 and q0 maps based on the best fit values and the given healpix symmetry axes.
 
