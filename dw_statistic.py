@@ -67,7 +67,7 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
 
     return dw_up, dw_down
 
-def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[np.ndarray, np.ndarray]:
+def total_dw(healpix_dirs: np.ndarray, pts: int, zup: float, zdown: float, datos: Tuple) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Calculate the total dw statistic for all healpix directions.
 
@@ -78,7 +78,9 @@ def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[np.ndarray, np.nda
     Returns:
         Tuple[float, float]: The total dw statistics for up and down directions.
     """
-
+    h0f = datos[4]
+    q0f = datos[5]
+     
     dw_ups = []
     dw_downs = []
 
@@ -90,4 +92,13 @@ def total_dw(healpix_dirs: np.ndarray, datos: Tuple) -> Tuple[np.ndarray, np.nda
     dw_ups = np.array(dw_ups)
     dw_downs = np.array(dw_downs)
 
-    return dw_ups, dw_downs
+    #save dw statistics
+    
+    
+    data_dw = np.column_stack((dw_ups, dw_downs))
+    filename_dw = f'compilations/[DW][SH0ES_CALIB][HEALPIX](hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
+    header_dw = 'This is the data for the dw statistics for the following parameters: \n {} points, q0f= {}, h0f= {}, zup= {}, zdown= {}\n dw_up dw_down'.format(pts, q0f, h0f, zup, zdown)
+    np.savetxt(filename_dw, data_dw, header=header_dw)
+    
+
+    return dw_ups, dw_downs, data_dw
