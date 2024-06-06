@@ -8,23 +8,23 @@ import numpy as np
 from cosmology import mu
 
 
-def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray,
-           cov_mat: pd.DataFrame, q0f: float) -> Tuple[float, float, float, float]:
+def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[float, float, float, float]:
     """
-    Calculate h0u and h0d based on the provided input.
-
+    Fits h0 values for the given healpix directions North and South hemispheres. 
+    
     Args:
         healpix_dirs (np.ndarray): Array of healpix directions.
-        v1 (np.ndarray): Array of v1 values.
-        r1 (np.ndarray): Array of r1 values.
-        hostyn (np.ndarray): Array of hostyn values.
-        cov_mat (pd.DataFrame): Covariance matrix.
-        q0f (float): q0f value.
+        datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
 
+        options:
+            filename (str, optional): Filename to save results. Defaults to None.
+        
     Returns:
         Tuple[float, float, float, float]containing h0u and h0d.
     """
 
+    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    
     dot_products = np.dot(v1, healpix_dirs)
 
     mask_up = dot_products >= 0
@@ -57,7 +57,7 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
     def chi2uh0(theta):
         """
-        Calculate chi2 for up values.
+        Calculate chi2 for up hemisphere.
 
         Args:
             theta (list): List containing a single element h0.
@@ -107,23 +107,19 @@ def hem_h0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
 # Hemispheric comparison implementation for q0.
 
-def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray,
-           cov_mat: pd.DataFrame, h0f: float) -> Tuple[float, float, float, float]:
+def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[float, float, float, float]:
     """
-    Calculate q0u and q0d values based on the given inputs.
+    Fits q0 values for the given healpix directions separating data into up and down hemispheres.
 
     Args:
         healpix_dirs (np.ndarray): Array of healpix directions.
-        v1 (np.ndarray): Array of v1 values.
-        r1 (np.ndarray): Array of r1 values.
-        hostyn (np.ndarray): Array of hostyn values.
-        cov_mat (pd.DataFrame): Covariance matrix.
-        h0f (float): Value of h0f.
+        datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
 
     Returns:
-        Tuple[float, float,float, float]containing q0u and q0d values.
+        Tuple[float, float,float, float]containing q0u and q0d values and their errors.
     """
-
+    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    
     # Calculate dot products
     dot_products = np.dot(v1, healpix_dirs)
 
@@ -204,6 +200,7 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
     chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
     q0d = chi2dmin.x[0]
     q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])  # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+
     return q0u, q0d, q0u_err, q0d_err
 
 
@@ -211,49 +208,44 @@ def hem_q0(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.
 
 # Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
-def multi_hem_map(healpix_vec: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.ndarray, cov_mat: pd.DataFrame, h0f: float, q0f: float):
+def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, filename = None):
     """
     Calculate multiple hemispherical maps.
 
     Args:
         healpix_vec (np.ndarray):  3D position vector for a given Healpix pixel.
-        v1 (np.ndarray): Contains each Sne position in the sky.
-        r1 (np.ndarray): Contains all SNe data.
-        hostyn (np.ndarray): Contains information about Cepheid host calibration for a given Sne.
-        cov_mat (pd.DataFrame): Covariance matrix.
-        h0f (float): Fiducial value of h0.
-        q0f (float): Fiducial value of q0.
+        datos (Tuple): Tuple of 6 elements, which are arrays of Sne positions, Sne data, binary array of cepheid host entries, covariance matrix, fiducial h0 value, and q0 value.
 
 
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays representing the calculated hemispherical maps.
     """
 
-    h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux = hem_h0(healpix_vec, v1, r1, hostyn, cov_mat, q0f)
-    q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux = hem_q0(healpix_vec, v1, r1, hostyn, cov_mat, h0f)
+    datos = datos
+
+    h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux = hem_h0(healpix_vec, datos)
+    q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux = hem_q0(healpix_vec, datos)
 
     return h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux, q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux
 
 
 # Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
 
-def exec_map(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: np.bool_, cov_mat: np.ndarray, h0f: float, q0f: float):
+def exec_map(healpix_dirs: np.ndarray, datos: Tuple, filename = None):
     """
     Execute the calculation of multiple hemispherical maps using the function multi_hem_map.
 
     Args:
-        healpix_vecs (np.ndarray): List of vectors for each pixel in the healpix pixelation scheme.
-        v1 (np.ndarray): Contains each Sne position in the sky.
-        r1 (np.ndarray): Contains all SNe data.
-        hostyn (np.ndarray): Contains information about Cepheid host calibration for a given Sne.
-        cov_mat (pd.DataFrame): Covariance matrix.
-        h0f (float): Fiducial value of h0.
-        q0f (float): Fiducial value of q0.
-
+        healpix_dirs (np.ndarray): Array of healpix directions.
+        datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
+        
 
     Returns:
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays containing the best fitted parameters for each hemispher.
     """
+
+    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    
     args_list = [(healpix_dir, v1, r1, hostyn, cov_mat, h0f, q0f)
                  for healpix_dir in healpix_dirs]
 
@@ -266,4 +258,5 @@ def exec_map(healpix_dirs: np.ndarray, v1: np.ndarray, r1: np.ndarray, hostyn: n
     results_h0 = (h0u, h0d, h0u_err, h0d_err)
     results_q0 = (q0u, q0d, q0u_err, q0d_err)
 
+    
     return results_h0, results_q0
