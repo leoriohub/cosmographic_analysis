@@ -48,3 +48,37 @@ def DecRa2Cartesian(dec, ra):
     z = np.cos(theta)
 
     return np.column_stack([x, y, z])
+
+
+
+def IndexToDecRa(nside, index):
+    """ 
+    Convert a given healpix index to its corresponding right ascension and declination.
+    
+    Args:
+        nside (int): The NSIDE parameter of the healpix map.
+        index (int): The index of the pixel in the healpix map.
+        
+    Returns:
+        tuple: A tuple containing the right ascension and declination angles in degrees.
+    """
+    theta, phi = hp.pix2ang(nside, index)
+    dec = np.degrees(np.pi/2 - theta)
+    ra = np.degrees(phi)
+    return ra, dec
+
+
+def DecRaToIndex(nside, dec, ra):
+    """
+    Convert declination and right ascension to healpix index.
+    
+    Args:
+        nside (int): The NSIDE parameter of the healpix map.
+        dec (float): Declination angle in degrees.
+        ra (float): Right Ascension angle in degrees.
+        
+    Returns:
+        int: The healpix index corresponding to the given declination and right ascension angles.
+    """
+    
+    index = hp.ang2pix(nside, np.radians(90 - dec), np.radians(ra))
