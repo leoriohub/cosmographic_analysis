@@ -280,8 +280,8 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None):
     
     return results_h0, results_q0
     
-    def load_map(file_path):
-        data = np.loadtxt(file_path, usecols=(0, 2), skiprows=4)
-        h0 = data[:, 0]
-        q0 = data[:, 1]
-        return h0, q0
+def load_map_old(file_path):
+    data = np.loadtxt(file_path, usecols=(0, 2), skiprows=4)
+    h0 = data[:, 0]
+    q0 = data[:, 1]
+    return h0, q0
