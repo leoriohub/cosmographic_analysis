@@ -8,7 +8,7 @@ import numpy as np
 from cosmology import mu
 
 
-def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[float, float, float, float]:
+def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
     """
     Fits h0 values for the given healpix directions North and South hemispheres. 
     
@@ -23,7 +23,11 @@ def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[flo
         Tuple[float, float, float, float]containing h0u and h0d.
     """
 
-    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    r1 = datos[0]
+    v1 = datos[1]
+    hostyn = datos[2]
+    cov_mat = datos[3]
+    q0f = datos[5]
     
     dot_products = np.dot(v1, healpix_dirs)
 
@@ -107,7 +111,7 @@ def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[flo
 
 # Hemispheric comparison implementation for q0.
 
-def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[float, float, float, float]:
+def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
     """
     Fits q0 values for the given healpix directions separating data into up and down hemispheres.
 
@@ -118,8 +122,12 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[flo
     Returns:
         Tuple[float, float,float, float]containing q0u and q0d values and their errors.
     """
-    r1, v1, hostyn, cov_mat, h0f, q0f = datos
-    
+    r1 = datos[0]
+    v1 = datos[1]
+    hostyn = datos[2]
+    cov_mat = datos[3]
+    h0f = datos[4]
+
     # Calculate dot products
     dot_products = np.dot(v1, healpix_dirs)
 
@@ -208,7 +216,7 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, filename = None) -> Tuple[flo
 
 # Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
-def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, filename = None):
+def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save = None):
     """
     Calculate multiple hemispherical maps.
 
@@ -231,7 +239,7 @@ def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, filename = None):
 
 # Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
 
-def exec_map(healpix_dirs: np.ndarray, datos: Tuple, filename = None):
+def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None):
     """
     Execute the calculation of multiple hemispherical maps using the function multi_hem_map.
 
@@ -244,9 +252,9 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, filename = None):
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays containing the best fitted parameters for each hemispher.
     """
 
-    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
     
-    args_list = [(healpix_dir, v1, r1, hostyn, cov_mat, h0f, q0f)
+    args_list = [(healpix_dir, datos)
                  for healpix_dir in healpix_dirs]
 
     with Pool() as pool:
@@ -258,5 +266,22 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, filename = None):
     results_h0 = (h0u, h0d, h0u_err, h0d_err)
     results_q0 = (q0u, q0d, q0u_err, q0d_err)
 
+    if save is not None:
+        
+        header_map = f'This is the data for the Hubble and q0 maps for the following parameters: \n {pts} points, q0f= {q0f}, h0f= {h0f}, zup= {zup}, zdown= {zdown}\n\n h0u h0u_err h0d h0d_err q0u q0u_err q0d q0d_err'
+
+        filename_map = f'compilations/[NEW][MAP][SH0ES_CALIB](pts={pts}_hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
+        save_data_map = np.column_stack([h0u, h0u_err, h0d, h0d_err, q0u, q0u_err, q0d, q0d_err])
+
+
+        # Uncomment to save the map
+
+        np.savetxt(filename_map, save_data_map, header=header_map)
     
     return results_h0, results_q0
+    
+    def load_map(file_path):
+        data = np.loadtxt(file_path, usecols=(0, 2), skiprows=4)
+        h0 = data[:, 0]
+        q0 = data[:, 1]
+        return h0, q0

@@ -16,7 +16,12 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
         Tuple[float, float]: The dw statistics for up and down directions.
     """
 
-    r1, v1, hostyn, cov_mat, h0f, q0f = datos
+    r1 = datos[0]
+    v1 = datos[1]
+    hostyn = datos[2]
+    h0f = datos[4]
+    q0f = datos[5]
+    
 
     cos_angle = np.dot(v1, healpix_dir)
 
