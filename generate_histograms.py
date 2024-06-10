@@ -72,7 +72,7 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
     ax4[0].set_xlabel(r'$Δh_0^{max}$')
     ax4[0].set_ylabel('Counts')
     ax4[0].legend(loc='upper right')
-    ax4[0].set_title(f'$Δh_0^{{max}}$ MC-{titlemarker}')
+    ax4[0].set_title(f'$Δh_0^{{max}}$ {titlemarker}-Realizations')
 
     
 
@@ -106,7 +106,7 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
     ax4[1].set_xlabel(r'$Δq_0^{max}$')
     ax4[1].set_ylabel('Counts')
     ax4[1].legend(loc='upper right')
-    ax4[1].set_title(f'$Δq_0^{{max}}$ MC-{titlemarker}')
+    ax4[1].set_title(f'$Δq_0^{{max}}$ {titlemarker}-Realizations')
     plt.tight_layout()
     if filename != None :
         plt.savefig(f'histograms/{filename}')
