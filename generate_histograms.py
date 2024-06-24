@@ -113,7 +113,7 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
     plt.show()
 
     
-def plot_both_histograms(data_h0: np.ndarray, data_q0: np.ndarray, filename = None) -> None:
+def plot_both_histograms(data_h0: list, data_q0: list, filename = None) -> None:
     """
     This function plots both LCDM and ISO histograms in the same figure. It takes in two arrays, `data_h0` and `data_q0`. The function also accepts an optional `filename` parameter to save the plot as an image file.
 
