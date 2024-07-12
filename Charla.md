@@ -1,0 +1,9 @@
+# Probing Cosmic Isotropy Using Cosmography: Insights from Low-Redshift Supernovae
+
+According to the cosmological principle, the universe should be homogeneous and isotropic on large scales. This foundational assumption faces scrutiny due to the significant Hubble tension, where Hubble parameter values derived from the cosmic microwave background (CMB) do not align with those obtained from local observations, prompting a re-examination of isotropy in the cosmos. 
+
+
+The hemispheric comparison method has been widely employed in cosmological studies to map directional dependencies of parameters across the sky. This approach, allows us to create what are known as Hubble  maps and which are on of the most direct ways in testing potential anisotropies. Various studies in the literature have applied this method to different datasets, frequently adopting model-independent techniques such as the cosmographic approach. This strategy allows for the analysis of cosmological data without assuming a specific model, thereby providing robust, assumption-free results. By comparing these model-independent maps against syntheic data sets, researchers can assess deviations from ΛCDM predictions and explore potential anisotropies in a more generalizable manner.
+
+
+Our contribution introduces a significant methodological improvement in the use of the Durbin-Watson autocorrelation test, which enabled us to discriminate between models fitted using full data and those excluding close (z < 0.01) SNe Ia data. Our results suggest that excluding low redshift data effectively reduces autocorrelation in the residuals of the fitted maps, mitigating systematic effects due to peculiar velocities. We have found that the detected anisotropy levels are compatible with the ΛCDM universe. The observed anisotropies appear to be non-genuine, attributed to the anisotropic spatial distribution of the data rather than an inherent property of the universe.
