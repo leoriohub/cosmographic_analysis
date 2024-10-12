@@ -4,6 +4,50 @@ import numpy as np
 # import distance modulus from cosmology.py
 from cosmology import mu
 
+
+def entire_dw(datos: Tuple):
+    """
+    Calculate the dw statistic for all the data without splitting it into hemispheres.
+
+    Args:
+        datos (Tuple): Tuple containing data arrays.
+
+    Returns:
+        float: The dw statistic for the entire dataset.
+    """
+
+    r1 = datos[0]
+    v1 = datos[1]
+    hostyn = datos[2]
+    h0f = datos[4]
+    q0f = datos[5]
+
+    # Extract redshifts and ensure they are floats
+    redshift = r1[:, 2].astype(float)
+
+    # Convert hostyn to boolean
+    hostyn = hostyn.astype(bool)
+
+    # Calculate the mu values
+    mu_sh0es = r1[:, 5]
+    muceph = r1[:, 7]
+
+    mu_model = np.array([mu(zi, h0f, q0f) for zi in redshift])
+
+    # Calculate residuals
+    resid = np.zeros(len(r1))
+
+    resid[hostyn] = muceph[hostyn] - mu_model[hostyn]
+    resid[~hostyn] = mu_sh0es[~hostyn] - mu_model[~hostyn]
+
+    # Calculate differences and dw statistics
+    diff = np.diff(resid)
+
+    dw = np.sum(diff**2) / np.sum(resid**2)
+
+    return dw
+
+
 def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
     """
     Calculate the dw statistic for a given healpix direction.
