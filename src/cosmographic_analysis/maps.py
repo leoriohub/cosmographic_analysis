@@ -1,3 +1,8 @@
+"""Map generation and loading utilities.
+
+Includes sky map generation from best-fit values and loading saved map data.
+"""
+
 import numpy as np
 import healpy as hp
 
@@ -28,3 +33,20 @@ def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray,
     np.add.at(q0map, indices, q0)
 
     return h0map, q0map
+
+
+import numpy as np
+
+def load_hubble_data(file_path):
+    # Load data using numpy, skipping the first 3 lines (2 header lines + 1 line of column names)
+    data = np.loadtxt(file_path, skiprows=3)
+    
+    return tuple(data.T)  # Transpose and return as a tuple of arrays
+
+
+def load_map_old(file_path: str):
+    """Legacy map loader (kept for backward compatibility)."""
+    data = np.loadtxt(file_path, usecols=(0, 2), skiprows=4)
+    h0 = data[:, 0]
+    q0 = data[:, 1]
+    return h0, q0
