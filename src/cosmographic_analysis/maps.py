@@ -35,8 +35,6 @@ def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray,
     return h0map, q0map
 
 
-import numpy as np
-
 def load_hubble_data(file_path):
     # Load data using numpy, skipping the first 3 lines (2 header lines + 1 line of column names)
     data = np.loadtxt(file_path, skiprows=3)
