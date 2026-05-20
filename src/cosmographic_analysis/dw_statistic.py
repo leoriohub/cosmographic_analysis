@@ -150,7 +150,7 @@ def total_dw(healpix_dirs: np.ndarray,  datos: Tuple, save = None) -> Tuple[np.n
 
     if save == 'y': 
         filename_dw = f'compilations/[DW][SH0ES_CALIB][HEALPIX](hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
-        header_dw = 'This is the data for the dw statistics for the following parameters: \n {} points, q0f= {}, h0f= {}, zup= {}, zdown= {}'.format(pts, q0f, h0f, zup, zdown)
+        header_dw = 'This is the data for the dw statistics for the following parameters: \n {} points, q0f= {}, h0f= {}, zup= {}, zdown= {}\n dw_up dw_down'.format(pts, q0f, h0f, zup, zdown)
         np.savetxt(filename_dw, data_dw, header=header_dw)
         
 
