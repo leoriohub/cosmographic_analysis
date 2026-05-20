@@ -1,0 +1,32 @@
+# Cosmographic Analysis Pipeline Configuration
+# All parameters that were scattered across notebook cells are centralized here.
+
+data:
+  # Paths to Pantheon+ data files (relative to project root)
+  lcparam: datos/Pantheon+SH0ES.dat.txt
+  cov_matrix: datos/Pantheon+SH0ES_STAT+SYS.cov.txt
+
+parameters:
+  # HEALPix resolution
+  nside: 16
+
+  # Fiducial cosmological parameters (Pantheon+ calibration)
+  h0f: 0.7304
+  q0f: -0.574
+
+  # Redshift range
+  zup: 0.1
+  zdown: 0.01
+
+  # Monte Carlo repetitions
+  repetitions: 500
+
+  # File naming prefix
+  prefix_name: '[SH0ES_CALIB]'
+
+output:
+  # Output directories (relative to project root)
+  compilations: compilations/
+  figures: figures/
+  histograms: histograms/
+  tables: tables/
