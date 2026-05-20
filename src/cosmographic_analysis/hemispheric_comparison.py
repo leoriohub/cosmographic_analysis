@@ -5,7 +5,7 @@ from tqdm import tqdm
 import pandas as pd
 import numpy as np
 # import distance modulus from cosmology.py
-from cosmology import mu
+from cosmographic_analysis.cosmology import mu
 
 
 def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
