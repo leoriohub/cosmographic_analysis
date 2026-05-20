@@ -1,6 +1,6 @@
 import numpy as np
 import healpy as hp
-from healpix_vectors import get_healpix_vectors
+from cosmographic_analysis.coordinates import get_healpix_vectors
 
 
 def get_max_anisotropy(data: list, healpix_dirs: np.ndarray) -> tuple:
