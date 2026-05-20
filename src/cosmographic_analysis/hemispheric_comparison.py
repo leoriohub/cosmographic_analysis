@@ -70,7 +70,7 @@ def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
             float: Chi2 value.
         """
         h0 = theta[0]  # theta is a 1-element array, extract the value
-        mu_model_up = np.array([mu(zi, h0, q0f) for zi in z_up])
+        mu_model_up = mu(z_up, h0, q0f)
 
         resid_up = np.zeros(len(up))
         resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
@@ -94,7 +94,7 @@ def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
             float: Chi2 value.
         """
         h0 = theta[0]  # theta is a 1-element array, extract the value
-        mu_model_down = np.array([mu(zi, h0, q0f) for zi in z_down])
+        mu_model_down = mu(z_down, h0, q0f)
 
         resid_down = np.zeros(len(down))
         resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
@@ -170,7 +170,7 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
             float: Ar value.
         """
         q0 = theta[0]  # theta is a 1-element array, extract the value
-        mu_model_up = np.array([mu(zi, h0f, q0) for zi in z_up])
+        mu_model_up = mu(z_up, h0f, q0)
 
         resid_up = np.zeros(len(datos_sne_up))
         resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
@@ -196,7 +196,7 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
             float: Ar value.
         """
         q0 = theta[0]  # theta is a 1-element array, extract the value
-        mu_model_down = np.array([mu(zi, h0f, q0) for zi in z_down])
+        mu_model_down = mu(z_down, h0f, q0)
 
         resid_down = np.zeros(len(datos_sne_down))
         resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]

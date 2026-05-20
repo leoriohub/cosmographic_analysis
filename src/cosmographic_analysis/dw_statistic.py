@@ -32,7 +32,7 @@ def entire_dw(datos: Tuple):
     mu_sh0es = r1[:, 5]
     muceph = r1[:, 7]
 
-    mu_model = np.array([mu(zi, h0f, q0f) for zi in redshift])
+    mu_model = mu(redshift, h0f, q0f)
 
     # Calculate residuals
     resid = np.zeros(len(r1))
@@ -93,8 +93,8 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
     mu_sh0es_down = down_data[:, 5]
     muceph_down = down_data[:, 7]
 
-    mu_model_up = np.array([mu(zi, h0f, q0f) for zi in up_redshift])
-    mu_model_down = np.array([mu(zi, h0f, q0f) for zi in down_redshift])
+    mu_model_up = mu(up_redshift, h0f, q0f)
+    mu_model_down = mu(down_redshift, h0f, q0f)
 
     # Calculate residuals
     resid_up = np.zeros(len(up_data))
