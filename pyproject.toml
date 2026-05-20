@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cosmographic_analysis"
+version = "1.0.0"
+description = "Testing Cosmological Isotropy through a Cosmographic approach"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "healpy",
+    "matplotlib",
+    "pandas",
+    "pyyaml",
+    "tqdm",
+]
+
+[project.scripts]
+cosmographic-pipeline = "cosmographic_analysis.scripts.run_pipeline:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

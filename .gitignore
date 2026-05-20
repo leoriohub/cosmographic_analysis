@@ -1,1 +1,24 @@
-/__pycache__
+# Byte-compiled
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+*.egg-info/
+.Python
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
