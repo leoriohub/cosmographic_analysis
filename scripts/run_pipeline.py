@@ -24,7 +24,7 @@ except ImportError:
 from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
 from cosmographic_analysis.coordinates import get_healpix_vectors, IndexToDecRa
-from cosmographic_analysis.hemispheric_comparison import exec_map
+from cosmographic_analysis.hemispheric_comparison import exec_map, precompute_hemisphere_data, exec_map_fixed
 from cosmographic_analysis.anisotropy import get_max_anisotropy
 from cosmographic_analysis.maps import generate_map
 from cosmographic_analysis.dw_statistic import hemispheric_dw, total_dw
@@ -182,12 +182,16 @@ def run_pipeline(config_path: str):
         mu_sample = np.random.normal(mu_fid, sigmuz)
         r1_lcdm[i, :, 5] = mu_sample
 
+    # Precompute hemisphere data once for all LCDM iterations
+    print("  Precomputing hemisphere data for LCDM...")
+    lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos)
+
     h0um_lcdm, h0dm_lcdm, q0um_lcdm, q0dm_lcdm = [], [], [], []
     for i, r1_it in enumerate(r1_lcdm):
         clear_output(wait=True)
         print(f"LCDM iteration {i+1}/{p.repetitions}")
         datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm))
+        res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed)
         h0um_lcdm.append(np.array(res_h0[0]))
         h0dm_lcdm.append(np.array(res_h0[1]))
         q0um_lcdm.append(np.array(res_q0[0]))

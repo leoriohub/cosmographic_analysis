@@ -279,3 +279,148 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None):
         np.savetxt(filename_map, save_data_map, header=header_map)
     
     return results_h0, results_q0
+
+
+def precompute_hemisphere_data(healpix_dirs: np.ndarray, datos: tuple) -> dict:
+    """Precompute hemisphere masks, indices, and cov matrix inversions for all directions.
+
+    For LCDM simulations where positions don't change, this avoids
+    recomputing dot products, masks, and matrix inversions on every iteration.
+    
+    Returns a dict keyed by direction index with entries:
+        up_indices, down_indices,
+        inv_cov_up, inv_cov_down
+    """
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+
+    precomputed = {}
+    for idx, healpix_dir in enumerate(tqdm(healpix_dirs, desc="Precomputing hemisphere data")):
+        dot_products = np.dot(v1, healpix_dir)
+        mask_up = dot_products >= 0
+        upi = np.where(mask_up)[0]
+        downi = np.where(~mask_up)[0]
+
+        inv_cov_up = np.linalg.inv(cov_mat.iloc[upi, upi].values)
+        inv_cov_down = np.linalg.inv(cov_mat.iloc[downi, downi].values)
+
+        precomputed[idx] = {
+            "up_indices": upi,
+            "down_indices": downi,
+            "inv_cov_up": inv_cov_up,
+            "inv_cov_down": inv_cov_down,
+        }
+
+    return precomputed
+
+
+def hem_h0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
+    """Same as hem_h0 but uses precomputed indices and covariance inversions."""
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+    q0f = datos[5]
+
+    pc = precomputed[dir_idx]
+    up = r1[pc["up_indices"]]
+    down = r1[pc["down_indices"]]
+    z_up = up[:, 2]
+    z_down = down[:, 2]
+
+    hostyn_up = hostyn[pc["up_indices"]]
+    hostyn_down = hostyn[pc["down_indices"]]
+    mu_sh0es_up = up[:, 5]
+    muceph_up = up[:, 7]
+    mu_sh0es_down = down[:, 5]
+    muceph_down = down[:, 7]
+
+    def chi2uh0(theta):
+        h0 = theta[0]
+        mu_model_up = mu(z_up, h0, q0f)
+        resid_up = np.zeros(len(up))
+        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
+        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
+        return np.dot(resid_up, np.dot(pc["inv_cov_up"], resid_up))
+
+    chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
+    h0u = chi2umin.x[0]
+    h0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
+
+    def chi2dh0(theta):
+        h0 = theta[0]
+        mu_model_down = mu(z_down, h0, q0f)
+        resid_down = np.zeros(len(down))
+        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
+        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
+        return np.dot(resid_down, np.dot(pc["inv_cov_down"], resid_down))
+
+    chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
+    h0d = chi2dmin.x[0]
+    h0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
+
+    return h0u, h0d, h0u_err, h0d_err
+
+
+def hem_q0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
+    """Same as hem_q0 but uses precomputed indices and covariance inversions."""
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+    h0f = datos[4]
+
+    pc = precomputed[dir_idx]
+    up = r1[pc["up_indices"]]
+    down = r1[pc["down_indices"]]
+    z_up = up[:, 2]
+    z_down = down[:, 2]
+
+    hostyn_up = hostyn[pc["up_indices"]]
+    hostyn_down = hostyn[pc["down_indices"]]
+    muceph_up = up[:, 7]
+    muceph_down = down[:, 7]
+    mu_sh0es_up = up[:, 5]
+    mu_sh0es_down = down[:, 5]
+
+    def chi2uq0(theta):
+        q0 = theta[0]
+        mu_model_up = mu(z_up, h0f, q0)
+        resid_up = np.zeros(len(up))
+        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
+        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
+        return np.dot(resid_up, np.dot(pc["inv_cov_up"], resid_up))
+
+    chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
+    q0u = chi2umin.x[0]
+    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
+
+    def chi2dq0(theta):
+        q0 = theta[0]
+        mu_model_down = mu(z_down, h0f, q0)
+        resid_down = np.zeros(len(down))
+        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
+        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
+        return np.dot(resid_down, np.dot(pc["inv_cov_down"], resid_down))
+
+    chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
+    q0d = chi2dmin.x[0]
+    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
+
+    return q0u, q0d, q0u_err, q0d_err
+
+
+def multi_hem_map_fixed(healpix_vec_and_idx: tuple, datos: tuple, precomputed: dict):
+    """Same as multi_hem_map but uses precomputed hemisphere data."""
+    healpix_vec, dir_idx = healpix_vec_and_idx
+    h0u, h0d, h0u_err, h0d_err = hem_h0_fixed(healpix_vec, datos, precomputed, dir_idx)
+    q0u, q0d, q0u_err, q0d_err = hem_q0_fixed(healpix_vec, datos, precomputed, dir_idx)
+    return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
+
+
+def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict):
+    """Same as exec_map but uses precomputed hemisphere data for LCDM simulations."""
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+    args_list = [(healpix_dir, idx) for idx, healpix_dir in enumerate(healpix_dirs)]
+
+    with Pool() as pool:
+        results_map = list(tqdm(
+            pool.starmap(multi_hem_map_fixed, [(a, datos, precomputed) for a in args_list]),
+            total=len(healpix_dirs),
+        ))
+
+    h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
+    return (h0u, h0d, h0u_err, h0d_err), (q0u, q0d, q0u_err, q0d_err)
