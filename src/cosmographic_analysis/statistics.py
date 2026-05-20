@@ -4,6 +4,7 @@ Includes Gaussian fitting and Monte Carlo p-value computation.
 """
 
 import numpy as np
+from typing import Dict
 from scipy.optimize import minimize
 from scipy.stats import norm
 
@@ -44,9 +45,6 @@ def fit_gaussian(data: np.ndarray) -> tuple:
     y_gaussian = norm.pdf(x_gaussian, loc=mu_best_fit, scale=std_best_fit)
     return x_gaussian, y_gaussian
 
-
-import numpy as np
-from typing import Dict
 
 def map_statistics(h0: np.ndarray, q0: np.ndarray, delta_h0_data_max: np.ndarray, delta_q0_data_max: np.ndarray) -> Dict[str, float]:
     """
