@@ -30,6 +30,8 @@ from cosmographic_analysis.maps import generate_map
 from cosmographic_analysis.dw_statistic import hemispheric_dw, total_dw
 from cosmographic_analysis.statistics import fit_gaussian, mc_statistics
 from cosmographic_analysis.plotting.histograms import plot_histograms, plot_both_histograms
+from cosmographic_analysis.plotting.skymaps import plot_h0_q0_maps
+from cosmographic_analysis.plotting.summary import save_summary_tables
 
 
 def run_pipeline(config_path: str):
@@ -246,6 +248,32 @@ def run_pipeline(config_path: str):
         delta_h0_iso_max, delta_q0_iso_max,
     ])
     p_values = mc_statistics(maximum_anisotropy_data, maximum_anisotropy_mc)
+    p_h0_iso_max, p_q0_iso_max, p_h0_lcdm_max, p_q0_lcdm_max = p_values
+
+    # Step 10: Sky maps
+    print("\n[10/11] Generating sky maps...")
+    map_path = plot_h0_q0_maps(p.nside, theta, phi, h0, q0, p.h0f, p.q0f, config)
+    print(f"  Map saved: {map_path}")
+
+    # Step 11: Summary tables
+    print("\n[11/11] Saving summary tables...")
+    save_summary_tables(
+        delta_h0_data_max=delta_h0_data_max,
+        delta_q0_data_max=delta_q0_data_max,
+        p_h0_iso_max=p_h0_iso_max,
+        p_q0_iso_max=p_q0_iso_max,
+        p_h0_lcdm_max=p_h0_lcdm_max,
+        p_q0_lcdm_max=p_q0_lcdm_max,
+        prefix_name=p.prefix_name,
+        h0f=p.h0f,
+        q0f=p.q0f,
+        zup=p.zup,
+        zdown=p.zdown,
+        pts=pts,
+        n_rep=p.repetitions,
+        tables_dir=o.tables,
+    )
+    print(f"  Tables saved to {o.tables}")
 
     print("\n" + "=" * 60)
     print("Pipeline complete.")
