@@ -3,7 +3,8 @@
 ## Environment
 
 - Conda env: `cosmographic_analysis`
-- Activate before running any project code: `conda activate cosmographic_analysis`
+- Auto-activates via `.envrc` (requires `direnv`): `sudo apt install direnv && direnv allow`
+- Manual activate: `conda activate cosmographic_analysis`
 - Dev install: `pip install -e .` from project root
 - All scripts run from project root (`/home/diego/Projects/cosmographic_analysis/`)
 - Pinned deps in `environment.yml` (auto-exported from conda)
