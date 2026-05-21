@@ -78,136 +78,53 @@ def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b
     return x_opt, error
 
 
-# Parallel mapping implementation.
-
-# Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
-
-def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save=None):
-    """
-    Fit h0 and q0 for a HEALPix direction, sharing covariance inversions.
-
-    Merges hem_h0 + hem_q0 to avoid redundant np.linalg.inv calls
-    (they computed identical inverse matrices independently).
-    """
-    r1 = datos[0]
-    v1 = datos[1]
-    hostyn = datos[2]
-    cov_mat = datos[3]
-    q0f = datos[5]
-    h0f = datos[4]
-
-    dot_products = np.dot(v1, healpix_vec)
-    mask_up = dot_products >= 0
-    upi = np.where(mask_up)[0]
-    downi = np.where(~mask_up)[0]
-
-    up = r1[mask_up]
-    down = r1[~mask_up]
-    hostyn_up = hostyn[mask_up]
-    hostyn_down = hostyn[~mask_up]
-    z_up = up[:, 2]
-    z_down = down[:, 2]
-    mu_sh0es_up = up[:, 5]
-    muceph_up = up[:, 7]
-    mu_sh0es_down = down[:, 5]
-    muceph_down = down[:, 7]
-
-    # Shared cov matrix inversions (done once instead of twice)
-    inv_newcovu = np.linalg.inv(cov_mat.iloc[upi, upi].values)
-    inv_newcovd = np.linalg.inv(cov_mat.iloc[downi, downi].values)
-
-    # ---------- h0 fit (q0 fixed) ----------
-    def chi2uh0(theta):
-        h0 = theta[0]
-        mu_model_up = mu(z_up, h0, q0f)
-        resid_up = np.zeros(len(up))
-        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
-        return np.dot(resid_up, np.dot(inv_newcovu, resid_up))
-
-    chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
-    h0u = chi2umin.x[0]
-    h0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
-
-    def chi2dh0(theta):
-        h0 = theta[0]
-        mu_model_down = mu(z_down, h0, q0f)
-        resid_down = np.zeros(len(down))
-        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
-        return np.dot(resid_down, np.dot(inv_newcovd, resid_down))
-
-    chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
-    h0d = chi2dmin.x[0]
-    h0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
-
-    # ---------- q0 fit (h0 fixed) ----------
-    def chi2uq0(theta):
-        q0 = theta[0]
-        mu_model_up = mu(z_up, h0f, q0)
-        resid_up = np.zeros(len(up))
-        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
-        return np.dot(resid_up, np.dot(inv_newcovu, resid_up))
-
-    chi2umin_q0 = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
-    q0u = chi2umin_q0.x[0]
-    q0u_err = np.sqrt(chi2umin_q0.hess_inv([1])[0])
-
-    def chi2dq0(theta):
-        q0 = theta[0]
-        mu_model_down = mu(z_down, h0f, q0)
-        resid_down = np.zeros(len(down))
-        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
-        return np.dot(resid_down, np.dot(inv_newcovd, resid_down))
-
-    chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
-    q0d = chi2dmin.x[0]
-    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
-
-    return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
+# ---- Generic chi2 for n-D optimization (scipy fallback) ----
 
 
-# Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
+def _fit_hemisphere_scipy(z, mu_ceph, mu_sh0es, hostyn, inv_cov, h0f, q0f, free_mask):
+    """Fit using scipy.minimize. free_mask[0]=fit h0, free_mask[1]=fit q0."""
+    n_free = int(free_mask[0]) + int(free_mask[1])
+    if n_free == 0:
+        return h0f, q0f, 0.0, 0.0
 
-def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save=None, pool: Pool = None, n_workers=1):
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    n = len(healpix_dirs)
-    args_list = [(healpix_dir, datos) for healpix_dir in healpix_dirs]
+    x0 = []
+    bounds = []
+    if free_mask[0]:
+        x0.append(h0f)
+        bounds.append((0.3, 1.5))
+    if free_mask[1]:
+        x0.append(q0f)
+        bounds.append((-1.5, 0.5))
+    x0 = np.array(x0)
 
-    if n_workers > 1 and pool is not None:
-        results_map = list(
-            pool.starmap(multi_hem_map, args_list)
-        )
-    else:
-        print(f"  Processing {n} directions (serial)...")
-        results_map = []
-        for i, h in enumerate(healpix_dirs, 1):
-            if i % 100 == 0:
-                print(f"  [{i}/{n}] directions")
-            results_map.append(multi_hem_map(h, datos))
+    def chi2_func(theta):
+        idx = 0
+        h0 = theta[idx] if free_mask[0] else h0f
+        idx = idx + 1 if free_mask[0] else idx
+        q0 = theta[idx] if free_mask[1] else q0f
+        mu_model = mu(z, h0, q0)
+        resid = np.empty(len(z))
+        for i in range(len(z)):
+            resid[i] = (mu_ceph[i] - mu_model[i]) if hostyn[i] == 1 else (mu_sh0es[i] - mu_model[i])
+        return np.dot(resid, np.dot(inv_cov, resid))
 
-    h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
-    results_h0 = (h0u, h0d, h0u_err, h0d_err)
-    results_q0 = (q0u, q0d, q0u_err, q0d_err)
+    res = minimize(chi2_func, x0, method='L-BFGS-B', bounds=bounds)
 
-    if save is not None:
-        header_map = (
-            f'Data for Hubble and q0 maps:\n'
-            f'{pts} points, q0f={q0f}, h0f={h0f}, zup={zup}, zdown={zdown}\n\n'
-            f'h0u h0u_err h0d h0d_err q0u q0u_err q0d q0d_err'
-        )
-        filename_map = (
-            f'compilations/[NEW][MAP][SH0ES_CALIB]'
-            f'(pts={pts}_hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
-        )
-        save_data_map = np.column_stack(
-            [h0u, h0u_err, h0d, h0d_err, q0u, q0u_err, q0d, q0d_err]
-        )
-        np.savetxt(filename_map, save_data_map, header=header_map)
+    h0_val = res.x[0] if free_mask[0] else h0f
+    q0_val = res.x[1 if free_mask[0] else 0] if free_mask[1] else q0f
 
-    return results_h0, results_q0
+    try:
+        hess_inv = res.hess_inv
+        if hasattr(hess_inv, 'todense'):
+            hess_inv = hess_inv.todense()
+        errs = np.sqrt(np.abs(np.diag(hess_inv)))
+    except Exception:
+        errs = np.ones(n_free) * 0.1
+
+    h0_err = errs[0] if free_mask[0] else 0.0
+    q0_err = errs[-1] if free_mask[1] else 0.0
+
+    return h0_val, q0_val, h0_err, q0_err
 
 
 # Module-level shared data for parallel precompute workers
@@ -285,142 +202,15 @@ def precompute_hemisphere_data(
     return precomputed
 
 
-def hem_h0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
-    """Same as hem_h0 but uses precomputed indices and covariance inversions."""
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-
-    pc = precomputed[dir_idx]
-    up = r1[pc["up_indices"]]
-    down = r1[pc["down_indices"]]
-    z_up = up[:, 2]
-    z_down = down[:, 2]
-
-    hostyn_up = hostyn[pc["up_indices"]]
-    hostyn_down = hostyn[pc["down_indices"]]
-    mu_sh0es_up = up[:, 5]
-    muceph_up = up[:, 7]
-    mu_sh0es_down = down[:, 5]
-    muceph_down = down[:, 7]
-
-    def chi2uh0(theta):
-        h0 = theta[0]
-        mu_model_up = mu(z_up, h0, q0f)
-        resid_up = np.zeros(len(up))
-        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
-        return np.dot(resid_up, np.dot(pc["inv_cov_up"], resid_up))
-
-    chi2umin = minimize(chi2uh0, [0.7], method='L-BFGS-B')
-    h0u = chi2umin.x[0]
-    h0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
-
-    def chi2dh0(theta):
-        h0 = theta[0]
-        mu_model_down = mu(z_down, h0, q0f)
-        resid_down = np.zeros(len(down))
-        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
-        return np.dot(resid_down, np.dot(pc["inv_cov_down"], resid_down))
-
-    chi2dmin = minimize(chi2dh0, [0.7], method='L-BFGS-B')
-    h0d = chi2dmin.x[0]
-    h0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
-
-    return h0u, h0d, h0u_err, h0d_err
-
-
-def hem_q0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
-    """Same as hem_q0 but uses precomputed indices and covariance inversions."""
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-
-    pc = precomputed[dir_idx]
-    up = r1[pc["up_indices"]]
-    down = r1[pc["down_indices"]]
-    z_up = up[:, 2]
-    z_down = down[:, 2]
-
-    hostyn_up = hostyn[pc["up_indices"]]
-    hostyn_down = hostyn[pc["down_indices"]]
-    muceph_up = up[:, 7]
-    muceph_down = down[:, 7]
-    mu_sh0es_up = up[:, 5]
-    mu_sh0es_down = down[:, 5]
-
-    def chi2uq0(theta):
-        q0 = theta[0]
-        mu_model_up = mu(z_up, h0f, q0)
-        resid_up = np.zeros(len(up))
-        resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
-        resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
-        return np.dot(resid_up, np.dot(pc["inv_cov_up"], resid_up))
-
-    chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
-    q0u = chi2umin.x[0]
-    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
-
-    def chi2dq0(theta):
-        q0 = theta[0]
-        mu_model_down = mu(z_down, h0f, q0)
-        resid_down = np.zeros(len(down))
-        resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
-        resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
-        return np.dot(resid_down, np.dot(pc["inv_cov_down"], resid_down))
-
-    chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
-    q0d = chi2dmin.x[0]
-    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
-
-    return q0u, q0d, q0u_err, q0d_err
-
-
-# Module-level cache for precomputed hemisphere data.
-# Set before Pool creation so forked workers inherit it via copy-on-write,
-# avoiding gigabytes of pickle overhead on every starmap call.
-_WORKER_PRECOMPUTED: Optional[dict] = None
-
-
-def _init_worker_precomputed(precomputed: dict):
-    """Store precomputed data in module-level cache for worker processes."""
-    global _WORKER_PRECOMPUTED
-    _WORKER_PRECOMPUTED = precomputed
-
-
-def multi_hem_map_fixed_worker(healpix_vec: np.ndarray, dir_idx: int, datos: tuple):
-    """Worker function that reads precomputed data from module-level cache."""
-
-    h0u, h0d, h0u_err, h0d_err = hem_h0_fixed(healpix_vec, datos, _WORKER_PRECOMPUTED, dir_idx)
-    q0u, q0d, q0u_err, q0d_err = hem_q0_fixed(healpix_vec, datos, _WORKER_PRECOMPUTED, dir_idx)
-    return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
-
-
-def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None, n_workers=1):
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    n = len(healpix_dirs)
-    args_list = [(healpix_dir, idx, datos) for idx, healpix_dir in enumerate(healpix_dirs)]
-
-    # Note: in parallel mode, the caller must have called _init_worker_precomputed()
-    # BEFORE creating the pool, so forked workers inherit the data via copy-on-write.
-    _init_worker_precomputed(precomputed)
-
-    if n_workers > 1 and pool is not None:
-        results_map = list(pool.starmap(multi_hem_map_fixed_worker, args_list))
-    else:
-        print(f"  Processing {n} LCDM directions (serial)...")
-        results_map = []
-        for i, (h, idx, d) in enumerate(args_list, 1):
-            if i % 100 == 0:
-                print(f"    [{i}/{n}] directions")
-            results_map.append(multi_hem_map_fixed_worker(h, idx, d))
-
-    h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
-    return (h0u, h0d, h0u_err, h0d_err), (q0u, q0d, q0u_err, q0d_err)
-
-
 # ---- Numba-accelerated public functions ----
 
 
-def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple):
-    """Numba-accelerated: fits h0/q0 using golden section search."""
+def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple, method: str = 'golden'):
+    """Fit h0/q0 for a HEALPix direction.
+
+    Args:
+        method: 'golden' (fast 1D golden section) or 'scipy' (generic scipy, any-D).
+    """
     r1 = datos[0]
     v1 = datos[1]
     hostyn = datos[2]
@@ -433,9 +223,8 @@ def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple):
     upi = np.where(mask_up)[0]
     downi = np.where(~mask_up)[0]
 
-    hostyn_nb = hostyn.astype(np.int64)
-    hostyn_up = hostyn_nb[mask_up]
-    hostyn_down = hostyn_nb[~mask_up]
+    hostyn_up = hostyn[mask_up].astype(np.int64)
+    hostyn_down = hostyn[~mask_up].astype(np.int64)
 
     up = r1[mask_up]
     down = r1[~mask_up]
@@ -449,29 +238,37 @@ def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple):
     inv_cov_up = np.linalg.inv(cov_mat.iloc[upi, upi].values).astype(np.float64)
     inv_cov_down = np.linalg.inv(cov_mat.iloc[downi, downi].values).astype(np.float64)
 
-    h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
-    h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
-    q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
-    q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+    if method == 'golden':
+        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
+        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
+        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
+        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+    elif method == 'scipy':
+        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False))
+        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False))
+        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True))
+        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True))
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
     return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
 
 
-def exec_map_numba(healpix_dirs: np.ndarray, datos: tuple, save=None, pool: Pool = None, n_workers=1):
+def exec_map_numba(healpix_dirs: np.ndarray, datos: tuple, save=None, pool: Pool = None, n_workers=1, method: str = 'golden'):
     """Run multi_hem_map_numba across all directions."""
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
     n = len(healpix_dirs)
 
     if n_workers > 1 and pool is not None:
-        args_list = [(h, datos) for h in healpix_dirs]
+        args_list = [(h, datos, method) for h in healpix_dirs]
         results_map = list(pool.starmap(multi_hem_map_numba, args_list))
     else:
-        print(f"  Processing {n} directions (serial, numba)...")
+        print(f"  Processing {n} directions (method={method})...")
         results_map = []
         for i, h in enumerate(healpix_dirs, 1):
             if i % 100 == 0:
                 print(f"  [{i}/{n}] directions")
-            results_map.append(multi_hem_map_numba(h, datos))
+            results_map.append(multi_hem_map_numba(h, datos, method))
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
     results_h0 = (h0u, h0d, h0u_err, h0d_err)
@@ -493,14 +290,13 @@ def exec_map_numba(healpix_dirs: np.ndarray, datos: tuple, save=None, pool: Pool
     return results_h0, results_q0
 
 
-def multi_hem_map_fixed_numba(healpix_vec: np.ndarray, dir_idx: int, datos: tuple, precomputed: dict):
-    """Numba version using precomputed hemisphere data (for LCDM)."""
+def multi_hem_map_fixed_numba(healpix_vec: np.ndarray, dir_idx: int, datos: tuple, precomputed: dict, method: str = 'golden'):
+    """Precomputed version for LCDM."""
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
     pc = precomputed[dir_idx]
 
-    hostyn_nb = hostyn.astype(np.int64)
-    hostyn_up = hostyn_nb[pc["up_indices"]]
-    hostyn_down = hostyn_nb[pc["down_indices"]]
+    hostyn_up = hostyn[pc["up_indices"]].astype(np.int64)
+    hostyn_down = hostyn[pc["down_indices"]].astype(np.int64)
 
     z_up = r1[pc["up_indices"], 2].astype(np.float64)
     z_down = r1[pc["down_indices"], 2].astype(np.float64)
@@ -511,29 +307,37 @@ def multi_hem_map_fixed_numba(healpix_vec: np.ndarray, dir_idx: int, datos: tupl
     inv_cov_up = pc["inv_cov_up"].astype(np.float64)
     inv_cov_down = pc["inv_cov_down"].astype(np.float64)
 
-    h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
-    h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
-    q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
-    q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+    if method == 'golden':
+        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
+        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
+        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
+        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+    elif method == 'scipy':
+        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False))
+        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False))
+        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True))
+        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True))
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
     return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
 
 
-def exec_map_fixed_numba(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None, n_workers=1):
+def exec_map_fixed_numba(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None, n_workers=1, method: str = 'golden'):
     """Run multi_hem_map_fixed_numba across all directions (for LCDM)."""
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
     n = len(healpix_dirs)
 
     if n_workers > 1 and pool is not None:
-        args_list = [(h, idx, datos, precomputed) for idx, h in enumerate(healpix_dirs)]
+        args_list = [(h, idx, datos, precomputed, method) for idx, h in enumerate(healpix_dirs)]
         results_map = list(pool.starmap(multi_hem_map_fixed_numba, args_list))
     else:
-        print(f"  Processing {n} LCDM directions (serial, numba)...")
+        print(f"  Processing {n} LCDM directions (method={method})...")
         results_map = []
         for idx in range(n):
             if idx > 0 and (idx % 100 == 0 or idx == n - 1):
                 print(f"    [{idx+1}/{n}] directions")
-            results_map.append(multi_hem_map_fixed_numba(healpix_dirs[idx], idx, datos, precomputed))
+            results_map.append(multi_hem_map_fixed_numba(healpix_dirs[idx], idx, datos, precomputed, method))
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
     return (h0u, h0d, h0u_err, h0d_err), (q0u, q0d, q0u_err, q0d_err)

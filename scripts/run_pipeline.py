@@ -30,10 +30,10 @@ def _init_iso_worker(data):
 
 def _iso_worker_task(v1_it):
     from cosmographic_analysis.hemispheric_comparison import exec_map_numba as _exec_numba
-    r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs = _WORKER_ISO_DATA
+    r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, method = _WORKER_ISO_DATA
     try:
         datos = [r1, v1_it, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
-        res_h0, res_q0 = _exec_numba(healpix_dirs, tuple(datos), n_workers=1)
+        res_h0, res_q0 = _exec_numba(healpix_dirs, tuple(datos), n_workers=1, method=method)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
         q0u = np.array(res_q0[0])
@@ -54,10 +54,10 @@ def _init_lcdm_worker(data):
 
 def _lcdm_worker_task(r1_it):
     from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba as _exec_fixed_numba
-    v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed = _WORKER_LCDM_DATA
+    v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed, method = _WORKER_LCDM_DATA
     try:
         datos = [r1_it, v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
-        res_h0, res_q0 = _exec_fixed_numba(healpix_dirs, tuple(datos), precomputed, n_workers=1)
+        res_h0, res_q0 = _exec_fixed_numba(healpix_dirs, tuple(datos), precomputed, n_workers=1, method=method)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
         q0u = np.array(res_q0[0])
@@ -82,7 +82,7 @@ from cosmographic_analysis.plotting.skymaps import plot_h0_q0_maps
 from cosmographic_analysis.plotting.summary import save_summary_tables
 
 
-def run_pipeline(config_path: str, n_workers: int = 1):
+def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'golden'):
     config = load_config(config_path)
     ensure_output_dirs(config)
     p = config.parameters
@@ -95,7 +95,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     print(f"  nside={p.nside}, h0f={p.h0f}, q0f={p.q0f}")
     print(f"  redshift range: {p.zdown} < z < {p.zup}")
     print(f"  repetitions: {p.repetitions}")
-    print(f"  n_workers: {n_workers}")
+    print(f"  n_workers: {n_workers}, optimizer: {optimizer}")
     print("=" * 60)
 
     # Step 1: Load data
@@ -122,7 +122,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     # Step 3: Hemispheric comparison (single execution, use inner parallelism)
     print(f"\n[3/9] Running hemispheric comparison ({len(healpix_dirs)} directions)...")
     pool = Pool(min(n_workers, 8, os.cpu_count() or 8)) if n_workers > 1 else None
-    results_h0, results_q0 = exec_map_numba(healpix_dirs, datos, pool=pool, n_workers=n_workers)
+    results_h0, results_q0 = exec_map_numba(healpix_dirs, datos, pool=pool, n_workers=n_workers, method=optimizer)
     if pool is not None:
         pool.close()
         pool.join()
@@ -185,7 +185,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
         v1_iso[i] = vecti
 
     if n_workers > 1:
-        iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs)
+        iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, optimizer)
         n_iso_workers = min(n_workers, p.repetitions)
         with Pool(n_iso_workers, initializer=_init_iso_worker, initargs=(iso_shared,)) as iso_pool:
             print(f"  Running {p.repetitions} iterations with {n_iso_workers} workers...")
@@ -201,7 +201,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
                 if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                     print(f"  ISO [{i+1}/{p.repetitions}]")
                 datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-                res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=1)
+                res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=1, method=optimizer)
                 h0u = np.array(res_h0[0])
                 h0d = np.array(res_h0[1])
                 q0u = np.array(res_q0[0])
@@ -231,7 +231,6 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     # Step 8: Synthetic LCDM simulation
     print(f"\n[8/9] LCDM simulation ({p.repetitions} repetitions)...")
     from cosmographic_analysis.cosmology import mu
-    from cosmographic_analysis.hemispheric_comparison import _init_worker_precomputed
 
     mu_fid = np.array([mu(zi, p.h0f, p.q0f) for zi in zz])
     r1_lcdm = np.tile(r1, (p.repetitions, 1, 1))
@@ -243,9 +242,8 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos, n_workers=n_workers)
 
     if n_workers > 1:
-        lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed)
+        lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed, optimizer)
         n_lcdm_workers = min(n_workers, p.repetitions)
-        _init_worker_precomputed(lcdm_precomputed)
         with Pool(n_lcdm_workers, initializer=_init_lcdm_worker, initargs=(lcdm_shared,)) as lcdm_pool:
             print(f"  Running {p.repetitions} iterations with {n_lcdm_workers} workers...")
             results = list(lcdm_pool.starmap(_lcdm_worker_task, [(r1_lcdm[i],) for i in range(p.repetitions)]))
@@ -260,7 +258,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
                 if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                     print(f"  LCDM [{i+1}/{p.repetitions}]")
                 datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-                res_h0, res_q0 = exec_map_fixed_numba(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1)
+                res_h0, res_q0 = exec_map_fixed_numba(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1, method=optimizer)
                 h0u = np.array(res_h0[0])
                 h0d = np.array(res_h0[1])
                 q0u = np.array(res_q0[0])
@@ -363,8 +361,10 @@ def main():
     parser = argparse.ArgumentParser(description="Cosmographic analysis pipeline")
     parser.add_argument("--config", default=None, help="Path to config.yaml")
     parser.add_argument("--n-workers", type=int, default=1, help="Number of parallel workers (default: 1 = serial)")
+    parser.add_argument("--optimizer", choices=["golden", "scipy"], default="golden",
+                        help="Optimizer: 'golden' (fast numba 1D) or 'scipy' (generic nD)")
     args = parser.parse_args()
-    run_pipeline(args.config, args.n_workers)
+    run_pipeline(args.config, args.n_workers, args.optimizer)
 
 
 if __name__ == "__main__":
