@@ -182,16 +182,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     for i in range(p.repetitions):
         vecti = np.random.randn(len(ra), 3)
         vecti /= np.linalg.norm(vecti, axis=1)[:, np.newaxis]
-        thetai = np.arccos(vecti[:, 2])
-        phii = np.arctan2(vecti[:, 1], vecti[:, 0])
-        deci = thetai
-        rai = np.pi - phii
-        v1i = np.column_stack([
-            np.sin(rai)*np.cos(deci),
-            np.sin(rai)*np.sin(deci),
-            np.cos(rai),
-        ])
-        v1_iso[i] = v1i
+        v1_iso[i] = vecti
 
     if n_workers > 1:
         iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs)

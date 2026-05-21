@@ -42,16 +42,7 @@ def run_iso(config_path: str, n_workers: int = 1):
     for i in range(p.repetitions):
         vecti = np.random.randn(len(ra), 3)
         vecti /= np.linalg.norm(vecti, axis=1)[:, np.newaxis]
-        thetai = np.arccos(vecti[:, 2])
-        phii = np.arctan2(vecti[:, 1], vecti[:, 0])
-        deci = thetai
-        rai = np.pi - phii
-        v1i = np.column_stack([
-            np.sin(rai)*np.cos(deci),
-            np.sin(rai)*np.sin(deci),
-            np.cos(rai),
-        ])
-        v1_iso[i] = v1i
+        v1_iso[i] = vecti
 
     h0u_all, h0d_all, q0u_all, q0d_all = [], [], [], []
     for i, v1_it in enumerate(v1_iso):
