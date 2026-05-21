@@ -131,10 +131,6 @@ The full pipeline (`scripts/run_pipeline.py`) executes:
 - matplotlib — plotting
 - pyyaml — configuration
 
-## Citation
-
-If you use this code, please cite the associated paper.
-
 ## License
 
 [License information]
