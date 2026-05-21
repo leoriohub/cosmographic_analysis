@@ -8,7 +8,7 @@ data:
 
 parameters:
   # HEALPix resolution
-  nside: 16
+  nside: 8
 
   # Fiducial cosmological parameters (Pantheon+ calibration)
   h0f: 0.7304

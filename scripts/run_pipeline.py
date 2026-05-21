@@ -18,6 +18,56 @@ from multiprocessing import Pool
 import numpy as np
 import healpy as hp
 
+from cosmographic_analysis.hemispheric_comparison import exec_map, exec_map_fixed
+
+
+# Module-level shared data for ISO parallel workers (fork copy-on-write)
+_WORKER_ISO_DATA = None
+
+def _init_iso_worker(data):
+    global _WORKER_ISO_DATA
+    _WORKER_ISO_DATA = data
+
+def _iso_worker_task(v1_it):
+    from cosmographic_analysis.hemispheric_comparison import exec_map as _exec
+    r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs = _WORKER_ISO_DATA
+    try:
+        datos = [r1, v1_it, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
+        res_h0, res_q0 = _exec(healpix_dirs, tuple(datos), n_workers=1)
+        h0u = np.array(res_h0[0])
+        h0d = np.array(res_h0[1])
+        q0u = np.array(res_q0[0])
+        q0d = np.array(res_q0[1])
+        h0m = np.concatenate((h0u, h0d))
+        q0m = np.concatenate((q0u, q0d))
+        return (np.max(h0m) - np.min(h0m), np.max(q0m) - np.min(q0m))
+    except Exception:
+        return (np.nan, np.nan)
+
+
+# Module-level shared data for LCDM parallel workers
+_WORKER_LCDM_DATA = None
+
+def _init_lcdm_worker(data):
+    global _WORKER_LCDM_DATA
+    _WORKER_LCDM_DATA = data
+
+def _lcdm_worker_task(r1_it):
+    from cosmographic_analysis.hemispheric_comparison import exec_map_fixed as _exec_fixed
+    v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed = _WORKER_LCDM_DATA
+    try:
+        datos = [r1_it, v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
+        res_h0, res_q0 = _exec_fixed(healpix_dirs, tuple(datos), precomputed, n_workers=1)
+        h0u = np.array(res_h0[0])
+        h0d = np.array(res_h0[1])
+        q0u = np.array(res_q0[0])
+        q0d = np.array(res_q0[1])
+        h0m = np.concatenate((h0u, h0d))
+        q0m = np.concatenate((q0u, q0d))
+        return (np.max(h0m) - np.min(h0m), np.max(q0m) - np.min(q0m))
+    except Exception:
+        return (np.nan, np.nan)
+
 
 from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
@@ -69,14 +119,13 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     healpix_ra, healpix_dec = IndexToDecRa(p.nside, pixel_indices)
     healpix_dirs = get_healpix_vectors(p.nside)
 
-    # Create multiprocessing pool only for parallel mode
-    pool = None
-    if n_workers > 1:
-        pool = Pool(min(n_workers, 8, os.cpu_count() or 8))
-
-    # Step 3: Hemispheric comparison
+    # Step 3: Hemispheric comparison (single execution, use inner parallelism)
     print(f"\n[3/9] Running hemispheric comparison ({len(healpix_dirs)} directions)...")
+    pool = Pool(min(n_workers, 8, os.cpu_count() or 8)) if n_workers > 1 else None
     results_h0, results_q0 = exec_map(healpix_dirs, datos, pool=pool, n_workers=n_workers)
+    if pool is not None:
+        pool.close()
+        pool.join()
     h0u, h0d, h0u_err, h0d_err = results_h0
     q0u, q0d, q0u_err, q0d_err = results_q0
 
@@ -128,6 +177,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
 
     # Step 7: Synthetic ISO simulation
     print(f"\n[7/9] ISO simulation ({p.repetitions} repetitions)...")
+
     v1_iso = np.zeros((p.repetitions, len(ra), 3))
     for i in range(p.repetitions):
         vecti = np.random.randn(len(ra), 3)
@@ -143,34 +193,38 @@ def run_pipeline(config_path: str, n_workers: int = 1):
         ])
         v1_iso[i] = v1i
 
-    h0u_iso, h0d_iso, q0u_iso, q0d_iso = [], [], [], []
-    for i, v1_it in enumerate(v1_iso):
-        try:
-            if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
-                print(f"  ISO [{i+1}/{p.repetitions}]")
-            datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-            res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), pool=pool, n_workers=n_workers)
-            h0u_iso.append(np.array(res_h0[0]))
-            h0d_iso.append(np.array(res_h0[1]))
-            q0u_iso.append(np.array(res_q0[0]))
-            q0d_iso.append(np.array(res_q0[1]))
-        except Exception as e:
-            print(f"  [WARN] ISO iteration {i+1} failed: {e}")
-            npix = len(healpix_dirs)
-            h0u_iso.append(np.full(npix, np.nan))
-            h0d_iso.append(np.full(npix, np.nan))
-            q0u_iso.append(np.full(npix, np.nan))
-            q0d_iso.append(np.full(npix, np.nan))
-
-    h0u_iso = np.array(h0u_iso)
-    h0d_iso = np.array(h0d_iso)
-    q0u_iso = np.array(q0u_iso)
-    q0d_iso = np.array(q0d_iso)
-
-    h0m_iso = np.concatenate((h0u_iso, h0d_iso), axis=1)
-    q0m_iso = np.concatenate((q0u_iso, q0d_iso), axis=1)
-    delta_h0_iso_max = np.max(h0m_iso, axis=1) - np.min(h0m_iso, axis=1)
-    delta_q0_iso_max = np.max(q0m_iso, axis=1) - np.min(q0m_iso, axis=1)
+    if n_workers > 1:
+        iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs)
+        n_iso_workers = min(n_workers, p.repetitions)
+        with Pool(n_iso_workers, initializer=_init_iso_worker, initargs=(iso_shared,)) as iso_pool:
+            print(f"  Running {p.repetitions} iterations with {n_iso_workers} workers...")
+            results = list(iso_pool.starmap(_iso_worker_task, [(v1_iso[i],) for i in range(p.repetitions)]))
+        for i in range(0, p.repetitions, 50):
+            print(f"  ISO [{min(i+50, p.repetitions)}/{p.repetitions}]")
+        delta_h0_iso_max = np.array([r[0] for r in results])
+        delta_q0_iso_max = np.array([r[1] for r in results])
+    else:
+        delta_h0_list, delta_q0_list = [], []
+        for i, v1_it in enumerate(v1_iso):
+            try:
+                if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
+                    print(f"  ISO [{i+1}/{p.repetitions}]")
+                datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
+                res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), n_workers=1)
+                h0u = np.array(res_h0[0])
+                h0d = np.array(res_h0[1])
+                q0u = np.array(res_q0[0])
+                q0d = np.array(res_q0[1])
+                h0m = np.concatenate((h0u, h0d))
+                q0m = np.concatenate((q0u, q0d))
+                delta_h0_list.append(np.max(h0m) - np.min(h0m))
+                delta_q0_list.append(np.max(q0m) - np.min(q0m))
+            except Exception as e:
+                print(f"  [WARN] ISO iteration {i+1} failed: {e}")
+                delta_h0_list.append(np.nan)
+                delta_q0_list.append(np.nan)
+        delta_h0_iso_max = np.array(delta_h0_list)
+        delta_q0_iso_max = np.array(delta_q0_list)
 
     header_iso = (
         f"This is the data for ISO distribution with new set of data for each repetition\n"
@@ -183,14 +237,10 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     )
     np.savetxt(filename_iso, np.column_stack([delta_h0_iso_max, delta_q0_iso_max]), header=header_iso)
 
-    # Close pool from earlier steps before LCDM
-    if pool is not None:
-        pool.close()
-        pool.join()
-
     # Step 8: Synthetic LCDM simulation
     print(f"\n[8/9] LCDM simulation ({p.repetitions} repetitions)...")
     from cosmographic_analysis.cosmology import mu
+    from cosmographic_analysis.hemispheric_comparison import _init_worker_precomputed
 
     mu_fid = np.array([mu(zi, p.h0f, p.q0f) for zi in zz])
     r1_lcdm = np.tile(r1, (p.repetitions, 1, 1))
@@ -199,45 +249,42 @@ def run_pipeline(config_path: str, n_workers: int = 1):
         mu_sample = np.random.normal(mu_fid, sigmuz)
         r1_lcdm[i, :, 5] = mu_sample
 
-    # Precompute hemisphere data once for all LCDM iterations
     print("  Precomputing hemisphere data for LCDM...")
     lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos)
 
-    # Create pool AFTER precompute so forked workers inherit precomputed data
-    pool = None
     if n_workers > 1:
-        from cosmographic_analysis.hemispheric_comparison import _init_worker_precomputed
+        lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed)
+        n_lcdm_workers = min(n_workers, p.repetitions)
         _init_worker_precomputed(lcdm_precomputed)
-        pool = Pool(min(n_workers, 8, os.cpu_count() or 8))
-
-    h0um_lcdm, h0dm_lcdm, q0um_lcdm, q0dm_lcdm = [], [], [], []
-    for i, r1_it in enumerate(r1_lcdm):
-        try:
-            if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
-                print(f"  LCDM [{i+1}/{p.repetitions}]")
-            datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-            res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, pool=pool, n_workers=n_workers)
-            h0um_lcdm.append(np.array(res_h0[0]))
-            h0dm_lcdm.append(np.array(res_h0[1]))
-            q0um_lcdm.append(np.array(res_q0[0]))
-            q0dm_lcdm.append(np.array(res_q0[1]))
-        except Exception as e:
-            print(f"  [WARN] LCDM iteration {i+1} failed: {e}")
-            npix = len(healpix_dirs)
-            h0um_lcdm.append(np.full(npix, np.nan))
-            h0dm_lcdm.append(np.full(npix, np.nan))
-            q0um_lcdm.append(np.full(npix, np.nan))
-            q0dm_lcdm.append(np.full(npix, np.nan))
-
-    h0um_lcdm = np.array(h0um_lcdm)
-    h0dm_lcdm = np.array(h0dm_lcdm)
-    q0um_lcdm = np.array(q0um_lcdm)
-    q0dm_lcdm = np.array(q0dm_lcdm)
-
-    h0m_lcdm = np.concatenate((h0um_lcdm, h0dm_lcdm), axis=1)
-    q0m_lcdm = np.concatenate((q0um_lcdm, q0dm_lcdm), axis=1)
-    delta_h0_lcdm_max = np.max(h0m_lcdm, axis=1) - np.min(h0m_lcdm, axis=1)
-    delta_q0_lcdm_max = np.max(q0m_lcdm, axis=1) - np.min(q0m_lcdm, axis=1)
+        with Pool(n_lcdm_workers, initializer=_init_lcdm_worker, initargs=(lcdm_shared,)) as lcdm_pool:
+            print(f"  Running {p.repetitions} iterations with {n_lcdm_workers} workers...")
+            results = list(lcdm_pool.starmap(_lcdm_worker_task, [(r1_lcdm[i],) for i in range(p.repetitions)]))
+        for i in range(0, p.repetitions, 50):
+            print(f"  LCDM [{min(i+50, p.repetitions)}/{p.repetitions}]")
+        delta_h0_lcdm_max = np.array([r[0] for r in results])
+        delta_q0_lcdm_max = np.array([r[1] for r in results])
+    else:
+        delta_h0_list, delta_q0_list = [], []
+        for i, r1_it in enumerate(r1_lcdm):
+            try:
+                if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
+                    print(f"  LCDM [{i+1}/{p.repetitions}]")
+                datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
+                res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1)
+                h0u = np.array(res_h0[0])
+                h0d = np.array(res_h0[1])
+                q0u = np.array(res_q0[0])
+                q0d = np.array(res_q0[1])
+                h0m = np.concatenate((h0u, h0d))
+                q0m = np.concatenate((q0u, q0d))
+                delta_h0_list.append(np.max(h0m) - np.min(h0m))
+                delta_q0_list.append(np.max(q0m) - np.min(q0m))
+            except Exception as e:
+                print(f"  [WARN] LCDM iteration {i+1} failed: {e}")
+                delta_h0_list.append(np.nan)
+                delta_q0_list.append(np.nan)
+        delta_h0_lcdm_max = np.array(delta_h0_list)
+        delta_q0_lcdm_max = np.array(delta_q0_list)
 
     header_lcdm = (
         f"This is the data for LCDM distribution with new set of data for each repetition\n"
@@ -316,11 +363,6 @@ def run_pipeline(config_path: str, n_workers: int = 1):
         tables_dir=o.tables,
     )
     print(f"  Tables saved to {o.tables}")
-
-    # Clean up multiprocessing pool
-    if pool is not None:
-        pool.close()
-        pool.join()
 
     print("\n" + "=" * 60)
     print("Pipeline complete.")
