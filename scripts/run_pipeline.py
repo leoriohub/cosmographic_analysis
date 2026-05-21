@@ -18,7 +18,7 @@ from multiprocessing import Pool
 import numpy as np
 import healpy as hp
 
-from cosmographic_analysis.hemispheric_comparison import exec_map, exec_map_fixed
+from cosmographic_analysis.hemispheric_comparison import exec_map_numba, exec_map_fixed_numba
 
 
 # Module-level shared data for ISO parallel workers (fork copy-on-write)
@@ -29,11 +29,11 @@ def _init_iso_worker(data):
     _WORKER_ISO_DATA = data
 
 def _iso_worker_task(v1_it):
-    from cosmographic_analysis.hemispheric_comparison import exec_map as _exec
+    from cosmographic_analysis.hemispheric_comparison import exec_map_numba as _exec_numba
     r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs = _WORKER_ISO_DATA
     try:
         datos = [r1, v1_it, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
-        res_h0, res_q0 = _exec(healpix_dirs, tuple(datos), n_workers=1)
+        res_h0, res_q0 = _exec_numba(healpix_dirs, tuple(datos), n_workers=1)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
         q0u = np.array(res_q0[0])
@@ -53,11 +53,11 @@ def _init_lcdm_worker(data):
     _WORKER_LCDM_DATA = data
 
 def _lcdm_worker_task(r1_it):
-    from cosmographic_analysis.hemispheric_comparison import exec_map_fixed as _exec_fixed
+    from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba as _exec_fixed_numba
     v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed = _WORKER_LCDM_DATA
     try:
         datos = [r1_it, v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown]
-        res_h0, res_q0 = _exec_fixed(healpix_dirs, tuple(datos), precomputed, n_workers=1)
+        res_h0, res_q0 = _exec_fixed_numba(healpix_dirs, tuple(datos), precomputed, n_workers=1)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
         q0u = np.array(res_q0[0])
@@ -72,7 +72,7 @@ def _lcdm_worker_task(r1_it):
 from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
 from cosmographic_analysis.coordinates import get_healpix_vectors, IndexToDecRa
-from cosmographic_analysis.hemispheric_comparison import exec_map, precompute_hemisphere_data, exec_map_fixed
+from cosmographic_analysis.hemispheric_comparison import exec_map_numba, precompute_hemisphere_data, exec_map_fixed_numba
 from cosmographic_analysis.anisotropy import get_max_anisotropy
 from cosmographic_analysis.maps import generate_map
 from cosmographic_analysis.dw_statistic import hemispheric_dw, total_dw
@@ -122,7 +122,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     # Step 3: Hemispheric comparison (single execution, use inner parallelism)
     print(f"\n[3/9] Running hemispheric comparison ({len(healpix_dirs)} directions)...")
     pool = Pool(min(n_workers, 8, os.cpu_count() or 8)) if n_workers > 1 else None
-    results_h0, results_q0 = exec_map(healpix_dirs, datos, pool=pool, n_workers=n_workers)
+    results_h0, results_q0 = exec_map_numba(healpix_dirs, datos, pool=pool, n_workers=n_workers)
     if pool is not None:
         pool.close()
         pool.join()
@@ -201,7 +201,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
                 if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                     print(f"  ISO [{i+1}/{p.repetitions}]")
                 datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-                res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), n_workers=1)
+                res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=1)
                 h0u = np.array(res_h0[0])
                 h0d = np.array(res_h0[1])
                 q0u = np.array(res_q0[0])
@@ -260,7 +260,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
                 if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                     print(f"  LCDM [{i+1}/{p.repetitions}]")
                 datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-                res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1)
+                res_h0, res_q0 = exec_map_fixed_numba(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1)
                 h0u = np.array(res_h0[0])
                 h0d = np.array(res_h0[1])
                 q0u = np.array(res_q0[0])
