@@ -13,19 +13,11 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import argparse
-import sys
 from multiprocessing import Pool
-from pathlib import Path
-
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 import numpy as np
 import healpy as hp
-from IPython.display import clear_output
-except ImportError:
-    def clear_output(wait=False):
-        pass
+
 
 from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
@@ -40,7 +32,7 @@ from cosmographic_analysis.plotting.skymaps import plot_h0_q0_maps
 from cosmographic_analysis.plotting.summary import save_summary_tables
 
 
-def run_pipeline(config_path: str):
+def run_pipeline(config_path: str, n_workers: int = 1):
     config = load_config(config_path)
     ensure_output_dirs(config)
     p = config.parameters
@@ -53,6 +45,7 @@ def run_pipeline(config_path: str):
     print(f"  nside={p.nside}, h0f={p.h0f}, q0f={p.q0f}")
     print(f"  redshift range: {p.zdown} < z < {p.zup}")
     print(f"  repetitions: {p.repetitions}")
+    print(f"  n_workers: {n_workers}")
     print("=" * 60)
 
     # Step 1: Load data
@@ -76,12 +69,14 @@ def run_pipeline(config_path: str):
     healpix_ra, healpix_dec = IndexToDecRa(p.nside, pixel_indices)
     healpix_dirs = get_healpix_vectors(p.nside)
 
-    # Create reusable multiprocessing pool for all iterations
-    pool = Pool(min(os.cpu_count() or 10, 10))
+    # Create multiprocessing pool only for parallel mode
+    pool = None
+    if n_workers > 1:
+        pool = Pool(min(n_workers, 8, os.cpu_count() or 8))
 
     # Step 3: Hemispheric comparison
     print(f"\n[3/9] Running hemispheric comparison ({len(healpix_dirs)} directions)...")
-    results_h0, results_q0 = exec_map(healpix_dirs, datos, pool=pool)
+    results_h0, results_q0 = exec_map(healpix_dirs, datos, pool=pool, n_workers=n_workers)
     h0u, h0d, h0u_err, h0d_err = results_h0
     q0u, q0d, q0u_err, q0d_err = results_q0
 
@@ -150,14 +145,22 @@ def run_pipeline(config_path: str):
 
     h0u_iso, h0d_iso, q0u_iso, q0d_iso = [], [], [], []
     for i, v1_it in enumerate(v1_iso):
-        clear_output(wait=True)
-        print(f"ISO iteration {i+1}/{p.repetitions}")
-        datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), pool=pool)
-        h0u_iso.append(np.array(res_h0[0]))
-        h0d_iso.append(np.array(res_h0[1]))
-        q0u_iso.append(np.array(res_q0[0]))
-        q0d_iso.append(np.array(res_q0[1]))
+        try:
+            if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
+                print(f"  ISO [{i+1}/{p.repetitions}]")
+            datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
+            res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), pool=pool, n_workers=n_workers)
+            h0u_iso.append(np.array(res_h0[0]))
+            h0d_iso.append(np.array(res_h0[1]))
+            q0u_iso.append(np.array(res_q0[0]))
+            q0d_iso.append(np.array(res_q0[1]))
+        except Exception as e:
+            print(f"  [WARN] ISO iteration {i+1} failed: {e}")
+            npix = len(healpix_dirs)
+            h0u_iso.append(np.full(npix, np.nan))
+            h0d_iso.append(np.full(npix, np.nan))
+            q0u_iso.append(np.full(npix, np.nan))
+            q0d_iso.append(np.full(npix, np.nan))
 
     h0u_iso = np.array(h0u_iso)
     h0d_iso = np.array(h0d_iso)
@@ -180,6 +183,11 @@ def run_pipeline(config_path: str):
     )
     np.savetxt(filename_iso, np.column_stack([delta_h0_iso_max, delta_q0_iso_max]), header=header_iso)
 
+    # Close pool from earlier steps before LCDM
+    if pool is not None:
+        pool.close()
+        pool.join()
+
     # Step 8: Synthetic LCDM simulation
     print(f"\n[8/9] LCDM simulation ({p.repetitions} repetitions)...")
     from cosmographic_analysis.cosmology import mu
@@ -195,16 +203,31 @@ def run_pipeline(config_path: str):
     print("  Precomputing hemisphere data for LCDM...")
     lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos)
 
+    # Create pool AFTER precompute so forked workers inherit precomputed data
+    pool = None
+    if n_workers > 1:
+        from cosmographic_analysis.hemispheric_comparison import _init_worker_precomputed
+        _init_worker_precomputed(lcdm_precomputed)
+        pool = Pool(min(n_workers, 8, os.cpu_count() or 8))
+
     h0um_lcdm, h0dm_lcdm, q0um_lcdm, q0dm_lcdm = [], [], [], []
     for i, r1_it in enumerate(r1_lcdm):
-        clear_output(wait=True)
-        print(f"LCDM iteration {i+1}/{p.repetitions}")
-        datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-        res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed)
-        h0um_lcdm.append(np.array(res_h0[0]))
-        h0dm_lcdm.append(np.array(res_h0[1]))
-        q0um_lcdm.append(np.array(res_q0[0]))
-        q0dm_lcdm.append(np.array(res_q0[1]))
+        try:
+            if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
+                print(f"  LCDM [{i+1}/{p.repetitions}]")
+            datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
+            res_h0, res_q0 = exec_map_fixed(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, pool=pool, n_workers=n_workers)
+            h0um_lcdm.append(np.array(res_h0[0]))
+            h0dm_lcdm.append(np.array(res_h0[1]))
+            q0um_lcdm.append(np.array(res_q0[0]))
+            q0dm_lcdm.append(np.array(res_q0[1]))
+        except Exception as e:
+            print(f"  [WARN] LCDM iteration {i+1} failed: {e}")
+            npix = len(healpix_dirs)
+            h0um_lcdm.append(np.full(npix, np.nan))
+            h0dm_lcdm.append(np.full(npix, np.nan))
+            q0um_lcdm.append(np.full(npix, np.nan))
+            q0dm_lcdm.append(np.full(npix, np.nan))
 
     h0um_lcdm = np.array(h0um_lcdm)
     h0dm_lcdm = np.array(h0dm_lcdm)
@@ -234,16 +257,22 @@ def run_pipeline(config_path: str):
     # Step 9: Fit Gaussians + plot histograms
     print("\n[9/9] Fitting Gaussians and plotting histograms...")
 
-    x_gauss_h0_iso, y_gauss_h0_iso = fit_gaussian(delta_h0_iso_max)
-    x_gauss_q0_iso, y_gauss_q0_iso = fit_gaussian(delta_q0_iso_max)
+    # Filter out NaN values from failed iterations before fitting
+    delta_h0_iso_max_clean = delta_h0_iso_max[~np.isnan(delta_h0_iso_max)]
+    delta_q0_iso_max_clean = delta_q0_iso_max[~np.isnan(delta_q0_iso_max)]
+    delta_h0_lcdm_max_clean = delta_h0_lcdm_max[~np.isnan(delta_h0_lcdm_max)]
+    delta_q0_lcdm_max_clean = delta_q0_lcdm_max[~np.isnan(delta_q0_lcdm_max)]
+
+    x_gauss_h0_iso, y_gauss_h0_iso = fit_gaussian(delta_h0_iso_max_clean)
+    x_gauss_q0_iso, y_gauss_q0_iso = fit_gaussian(delta_q0_iso_max_clean)
 
     data_h0_iso_hist = [delta_h0_iso_max, delta_h0_data_max, x_gauss_h0_iso, y_gauss_h0_iso]
     data_q0_iso_hist = [delta_q0_iso_max, delta_q0_data_max, x_gauss_q0_iso, y_gauss_q0_iso]
     file_name_iso = f"{o.histograms}[ISO](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}).png"
     plot_histograms(data_h0_iso_hist, data_q0_iso_hist, filename=file_name_iso)
 
-    x_gauss_h0_lcdm, y_gauss_h0_lcdm = fit_gaussian(delta_h0_lcdm_max)
-    x_gauss_q0_lcdm, y_gauss_q0_lcdm = fit_gaussian(delta_q0_lcdm_max)
+    x_gauss_h0_lcdm, y_gauss_h0_lcdm = fit_gaussian(delta_h0_lcdm_max_clean)
+    x_gauss_q0_lcdm, y_gauss_q0_lcdm = fit_gaussian(delta_q0_lcdm_max_clean)
 
     data_h0_lcdm_hist = [delta_h0_lcdm_max, delta_h0_data_max, x_gauss_h0_lcdm, y_gauss_h0_lcdm]
     data_q0_lcdm_hist = [delta_q0_lcdm_max, delta_q0_data_max, x_gauss_q0_lcdm, y_gauss_q0_lcdm]
@@ -289,8 +318,9 @@ def run_pipeline(config_path: str):
     print(f"  Tables saved to {o.tables}")
 
     # Clean up multiprocessing pool
-    pool.close()
-    pool.join()
+    if pool is not None:
+        pool.close()
+        pool.join()
 
     print("\n" + "=" * 60)
     print("Pipeline complete.")
@@ -300,8 +330,9 @@ def run_pipeline(config_path: str):
 def main():
     parser = argparse.ArgumentParser(description="Cosmographic analysis pipeline")
     parser.add_argument("--config", default=None, help="Path to config.yaml")
+    parser.add_argument("--n-workers", type=int, default=1, help="Number of parallel workers (default: 1 = serial)")
     args = parser.parse_args()
-    run_pipeline(args.config)
+    run_pipeline(args.config, args.n_workers)
 
 
 if __name__ == "__main__":

@@ -12,19 +12,9 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 
 import argparse
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 
 import numpy as np
 import healpy as hp
-try:
-    from IPython.display import clear_output
-except ImportError:
-    def clear_output(wait=False):
-        pass
 
 from cosmographic_analysis.config import load_config
 from cosmographic_analysis.data_loader import load_pantheon_data
@@ -34,7 +24,7 @@ from cosmographic_analysis.statistics import fit_gaussian
 from cosmographic_analysis.plotting.histograms import plot_histograms
 
 
-def run_iso(config_path: str):
+def run_iso(config_path: str, n_workers: int = 1):
     config = load_config(config_path)
     p = config.parameters
     d = config.data
@@ -65,10 +55,10 @@ def run_iso(config_path: str):
 
     h0u_all, h0d_all, q0u_all, q0d_all = [], [], [], []
     for i, v1_it in enumerate(v1_iso):
-        clear_output(wait=True)
-        print(f"Iteration {i+1}/{p.repetitions}")
+        if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
+            print(f"  [{i+1}/{p.repetitions}]")
         datos_lcdm = [r1, v1_it, hostyn, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm))
+        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), n_workers=n_workers)
         h0u_all.append(np.array(res_h0[0]))
         h0d_all.append(np.array(res_h0[1]))
         q0u_all.append(np.array(res_q0[0]))
@@ -92,8 +82,9 @@ def run_iso(config_path: str):
 def main():
     parser = argparse.ArgumentParser(description="Run ISO synthetic simulations")
     parser.add_argument("--config", default=None)
+    parser.add_argument("--n-workers", type=int, default=1, help="Number of parallel workers (default: 1 = serial)")
     args = parser.parse_args()
-    run_iso(args.config)
+    run_iso(args.config, args.n_workers)
 
 
 if __name__ == "__main__":

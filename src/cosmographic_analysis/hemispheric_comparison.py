@@ -8,16 +8,11 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 from multiprocessing import Pool
 from typing import Tuple, Optional
 from scipy.optimize import minimize
-from tqdm import tqdm
+
 import pandas as pd
 import numpy as np
 # import distance modulus from cosmology.py
 from cosmographic_analysis.cosmology import mu
-
-
-def _pool_size() -> int:
-    """Return a reasonable number of worker processes."""
-    return min(os.cpu_count() or 10, 10)
 
 
 def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
@@ -241,8 +236,6 @@ def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save = None):
         Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays representing the calculated hemispherical maps.
     """
 
-    datos = datos
-
     h0u_aux, h0d_aux, h0u_err_aux, h0d_err_aux = hem_h0(healpix_vec, datos)
     q0u_aux, q0d_aux, q0u_err_aux, q0d_err_aux = hem_q0(healpix_vec, datos)
 
@@ -251,89 +244,71 @@ def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save = None):
 
 # Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
 
-def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None, pool: Pool = None):
-    """
-    Execute the calculation of multiple hemispherical maps using the function multi_hem_map.
-
-    Args:
-        healpix_dirs (np.ndarray): Array of healpix directions.
-        datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
-        pool (Pool, optional): Reusable multiprocessing Pool. If None, creates a new one.
-        
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]: A tuple of four numpy arrays containing the best fitted parameters for each hemispher.
-    """
-
+def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save=None, pool: Pool = None, n_workers=1):
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    
-    args_list = [(healpix_dir, datos)
-                 for healpix_dir in healpix_dirs]
+    n = len(healpix_dirs)
+    args_list = [(healpix_dir, datos) for healpix_dir in healpix_dirs]
 
-    if pool is None:
-        with Pool(_pool_size()) as new_pool:
-            results_map = list(
-                tqdm(new_pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
-    else:
+    if n_workers > 1 and pool is not None:
         results_map = list(
-            tqdm(pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
+            pool.starmap(multi_hem_map, args_list)
+        )
+    else:
+        print(f"  Processing {n} directions (serial)...")
+        results_map = []
+        for i, h in enumerate(healpix_dirs, 1):
+            if i % 100 == 0:
+                print(f"  [{i}/{n}] directions")
+            results_map.append(multi_hem_map(h, datos))
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
-
     results_h0 = (h0u, h0d, h0u_err, h0d_err)
     results_q0 = (q0u, q0d, q0u_err, q0d_err)
 
     if save is not None:
-        
-        header_map = f'This is the data for the Hubble and q0 maps for the following parameters: \n {pts} points, q0f= {q0f}, h0f= {h0f}, zup= {zup}, zdown= {zdown}\n\n h0u h0u_err h0d h0d_err q0u q0u_err q0d q0d_err'
-
-        filename_map = f'compilations/[NEW][MAP][SH0ES_CALIB](pts={pts}_hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
-        save_data_map = np.column_stack([h0u, h0u_err, h0d, h0d_err, q0u, q0u_err, q0d, q0d_err])
-
-
-        # Uncomment to save the map
-
+        header_map = (
+            f'Data for Hubble and q0 maps:\n'
+            f'{pts} points, q0f={q0f}, h0f={h0f}, zup={zup}, zdown={zdown}\n\n'
+            f'h0u h0u_err h0d h0d_err q0u q0u_err q0d q0d_err'
+        )
+        filename_map = (
+            f'compilations/[NEW][MAP][SH0ES_CALIB]'
+            f'(pts={pts}_hf={h0f}_qf={q0f})({zup}>z>{zdown}).txt'
+        )
+        save_data_map = np.column_stack(
+            [h0u, h0u_err, h0d, h0d_err, q0u, q0u_err, q0d, q0d_err]
+        )
         np.savetxt(filename_map, save_data_map, header=header_map)
-    
+
     return results_h0, results_q0
 
 
 def precompute_hemisphere_data(healpix_dirs: np.ndarray, datos: tuple) -> dict:
-    """Precompute hemisphere masks, indices, and cov matrix inversions for all directions.
-
-    For LCDM simulations where positions don't change, this avoids
-    recomputing dot products, masks, and matrix inversions on every iteration.
-    
-    Returns a dict keyed by direction index with entries:
-        up_indices, down_indices,
-        inv_cov_up, inv_cov_down
-    """
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-
+    n = len(healpix_dirs)
     precomputed = {}
-    for idx, healpix_dir in enumerate(tqdm(healpix_dirs, desc="Precomputing hemisphere data")):
+    print(f"  Precomputing hemisphere data for {n} directions...")
+    for idx, healpix_dir in enumerate(healpix_dirs):
+        if idx > 0 and (idx % 100 == 0 or idx == n - 1):
+            print(f"    [{idx+1}/{n}] directions")
         dot_products = np.dot(v1, healpix_dir)
         mask_up = dot_products >= 0
         upi = np.where(mask_up)[0]
         downi = np.where(~mask_up)[0]
-
         inv_cov_up = np.linalg.inv(cov_mat.iloc[upi, upi].values)
         inv_cov_down = np.linalg.inv(cov_mat.iloc[downi, downi].values)
-
         precomputed[idx] = {
             "up_indices": upi,
             "down_indices": downi,
             "inv_cov_up": inv_cov_up,
             "inv_cov_down": inv_cov_down,
         }
-
     return precomputed
 
 
 def hem_h0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
     """Same as hem_h0 but uses precomputed indices and covariance inversions."""
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    q0f = datos[5]
 
     pc = precomputed[dir_idx]
     up = r1[pc["up_indices"]]
@@ -378,7 +353,6 @@ def hem_h0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_i
 def hem_q0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_idx: int):
     """Same as hem_q0 but uses precomputed indices and covariance inversions."""
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    h0f = datos[4]
 
     pc = precomputed[dir_idx]
     up = r1[pc["up_indices"]]
@@ -440,25 +414,24 @@ def multi_hem_map_fixed_worker(healpix_vec: np.ndarray, dir_idx: int, datos: tup
     return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
 
 
-def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None):
-    """Same as exec_map but uses precomputed hemisphere data for LCDM simulations.
-
-    Creates a fresh Pool so workers inherit precomputed data via fork
-    copy-on-write, avoiding gigabytes of pickle overhead per iteration.
-    """
+def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None, n_workers=1):
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+    n = len(healpix_dirs)
     args_list = [(healpix_dir, idx, datos) for idx, healpix_dir in enumerate(healpix_dirs)]
 
-    # Workers are forked after this, inheriting the precomputed data
+    # Note: in parallel mode, the caller must have called _init_worker_precomputed()
+    # BEFORE creating the pool, so forked workers inherit the data via copy-on-write.
     _init_worker_precomputed(precomputed)
 
-    pool = Pool(_pool_size())
-    results_map = list(tqdm(
-        pool.starmap(multi_hem_map_fixed_worker, args_list),
-        total=len(healpix_dirs),
-    ))
-    pool.close()
-    pool.join()
+    if n_workers > 1 and pool is not None:
+        results_map = list(pool.starmap(multi_hem_map_fixed_worker, args_list))
+    else:
+        print(f"  Processing {n} LCDM directions (serial)...")
+        results_map = []
+        for i, (h, idx, d) in enumerate(args_list, 1):
+            if i % 100 == 0:
+                print(f"    [{i}/{n}] directions")
+            results_map.append(multi_hem_map_fixed_worker(h, idx, d))
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
     return (h0u, h0d, h0u_err, h0d_err), (q0u, q0d, q0u_err, q0d_err)
