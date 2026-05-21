@@ -5,17 +5,7 @@ from cosmographic_analysis.coordinates import get_healpix_vectors
 
 def get_max_anisotropy(data: list, healpix_dirs: np.ndarray) -> tuple:
 
-    h0_up, h0_down, q0_up, q0_down = data 
-
-
-    delta_h0 = h0_up - h0_down
-    delta_h0_max_ind = np.argmax(np.abs(delta_h0))
-    max_h0_anis_vec = healpix_dirs[delta_h0_max_ind]
-    max_h0_anis_theta, max_h0_anis_phi = hp.vec2ang(max_h0_anis_vec)
-    max_h0_anis_dec = np.degrees(np.pi/2 - max_h0_anis_theta)[0]
-    max_h0_anis_ra = np.degrees(max_h0_anis_phi)[0]
-
-
+    h0_up, h0_down, q0_up, q0_down = data
 
     delta_h0 = h0_up - h0_down
     delta_q0 = q0_up - q0_down
