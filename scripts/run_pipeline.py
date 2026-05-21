@@ -105,7 +105,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
     print(f"  delta_h0 = {delta_h0_data_max:.6f} +/- {delta_h0_data_err:.6f}")
     print(f"  delta_q0 = {delta_q0_data_max:.6f} +/- {delta_q0_data_err:.6f}")
 
-    bestfit_data = [h0u, h0d, q0u, q0d]
+    bestfit_data = [np.array(h0u), np.array(h0d), np.array(q0u), np.array(q0d)]
     max_anis_dir = get_max_anisotropy(bestfit_data, healpix_dirs)
     print(f"  Max anisotropy direction (dec, ra) for q0: {max_anis_dir[0]}")
 
