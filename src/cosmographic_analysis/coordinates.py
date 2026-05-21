@@ -17,8 +17,7 @@ def get_healpix_vectors(nside: int) -> np.ndarray:
     npix = int(hp.nside2npix(nside) / 2)
     pixel_indices = np.arange(npix)
 
-    vectors = [hp.pix2vec(nside, idx) for idx in pixel_indices]
-    vectors = np.array(vectors)
+    vectors = np.array(hp.pix2vec(nside, pixel_indices)).T
 
     return vectors
 
