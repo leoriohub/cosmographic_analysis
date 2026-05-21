@@ -6,6 +6,11 @@ Replicates the ISO simulation section of main.ipynb.
 Usage: python scripts/run_synthetic_iso.py [--config config.yaml]
 """
 
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import argparse
 import sys
 from pathlib import Path

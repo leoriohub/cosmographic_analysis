@@ -1,11 +1,23 @@
+import os
+# Prevent BLAS thread oversubscription in multiprocessing workers
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 from multiprocessing import Pool
-from typing import Tuple
+from typing import Tuple, Optional
 from scipy.optimize import minimize
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 # import distance modulus from cosmology.py
 from cosmographic_analysis.cosmology import mu
+
+
+def _pool_size() -> int:
+    """Return a reasonable number of worker processes."""
+    return min(os.cpu_count() or 10, 10)
 
 
 def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
@@ -239,13 +251,14 @@ def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save = None):
 
 # Exec_map is a function that receives a list of healpix_dirs and maps the hemispheric comparison function to each healpix_dir in parallel.
 
-def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None):
+def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None, pool: Pool = None):
     """
     Execute the calculation of multiple hemispherical maps using the function multi_hem_map.
 
     Args:
         healpix_dirs (np.ndarray): Array of healpix directions.
         datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
+        pool (Pool, optional): Reusable multiprocessing Pool. If None, creates a new one.
         
 
     Returns:
@@ -257,7 +270,11 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save = None):
     args_list = [(healpix_dir, datos)
                  for healpix_dir in healpix_dirs]
 
-    with Pool() as pool:
+    if pool is None:
+        with Pool(_pool_size()) as new_pool:
+            results_map = list(
+                tqdm(new_pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
+    else:
         results_map = list(
             tqdm(pool.starmap(multi_hem_map, args_list), total=len(healpix_dirs)))
 
@@ -403,24 +420,45 @@ def hem_q0_fixed(healpix_dir: np.ndarray, datos: tuple, precomputed: dict, dir_i
     return q0u, q0d, q0u_err, q0d_err
 
 
-def multi_hem_map_fixed(healpix_vec_and_idx: tuple, datos: tuple, precomputed: dict):
-    """Same as multi_hem_map but uses precomputed hemisphere data."""
-    healpix_vec, dir_idx = healpix_vec_and_idx
-    h0u, h0d, h0u_err, h0d_err = hem_h0_fixed(healpix_vec, datos, precomputed, dir_idx)
-    q0u, q0d, q0u_err, q0d_err = hem_q0_fixed(healpix_vec, datos, precomputed, dir_idx)
+# Module-level cache for precomputed hemisphere data.
+# Set before Pool creation so forked workers inherit it via copy-on-write,
+# avoiding gigabytes of pickle overhead on every starmap call.
+_WORKER_PRECOMPUTED: Optional[dict] = None
+
+
+def _init_worker_precomputed(precomputed: dict):
+    """Store precomputed data in module-level cache for worker processes."""
+    global _WORKER_PRECOMPUTED
+    _WORKER_PRECOMPUTED = precomputed
+
+
+def multi_hem_map_fixed_worker(healpix_vec: np.ndarray, dir_idx: int, datos: tuple):
+    """Worker function that reads precomputed data from module-level cache."""
+
+    h0u, h0d, h0u_err, h0d_err = hem_h0_fixed(healpix_vec, datos, _WORKER_PRECOMPUTED, dir_idx)
+    q0u, q0d, q0u_err, q0d_err = hem_q0_fixed(healpix_vec, datos, _WORKER_PRECOMPUTED, dir_idx)
     return h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err
 
 
-def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict):
-    """Same as exec_map but uses precomputed hemisphere data for LCDM simulations."""
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
-    args_list = [(healpix_dir, idx) for idx, healpix_dir in enumerate(healpix_dirs)]
+def exec_map_fixed(healpix_dirs: np.ndarray, datos: tuple, precomputed: dict, pool: Pool = None):
+    """Same as exec_map but uses precomputed hemisphere data for LCDM simulations.
 
-    with Pool() as pool:
-        results_map = list(tqdm(
-            pool.starmap(multi_hem_map_fixed, [(a, datos, precomputed) for a in args_list]),
-            total=len(healpix_dirs),
-        ))
+    Creates a fresh Pool so workers inherit precomputed data via fork
+    copy-on-write, avoiding gigabytes of pickle overhead per iteration.
+    """
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
+    args_list = [(healpix_dir, idx, datos) for idx, healpix_dir in enumerate(healpix_dirs)]
+
+    # Workers are forked after this, inheriting the precomputed data
+    _init_worker_precomputed(precomputed)
+
+    pool = Pool(_pool_size())
+    results_map = list(tqdm(
+        pool.starmap(multi_hem_map_fixed_worker, args_list),
+        total=len(healpix_dirs),
+    ))
+    pool.close()
+    pool.join()
 
     h0u, h0d, h0u_err, h0d_err, q0u, q0d, q0u_err, q0d_err = zip(*results_map)
     return (h0u, h0d, h0u_err, h0d_err), (q0u, q0d, q0u_err, q0d_err)

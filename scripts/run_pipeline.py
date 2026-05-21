@@ -6,8 +6,15 @@ Reproduces the entire main.ipynb pipeline as a CLI script.
 Usage: python scripts/run_pipeline.py [--config config.yaml]
 """
 
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+
 import argparse
 import sys
+from multiprocessing import Pool
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
@@ -15,8 +22,7 @@ sys.path.insert(0, str(project_root))
 
 import numpy as np
 import healpy as hp
-try:
-    from IPython.display import clear_output
+from IPython.display import clear_output
 except ImportError:
     def clear_output(wait=False):
         pass
@@ -70,9 +76,12 @@ def run_pipeline(config_path: str):
     healpix_ra, healpix_dec = IndexToDecRa(p.nside, pixel_indices)
     healpix_dirs = get_healpix_vectors(p.nside)
 
+    # Create reusable multiprocessing pool for all iterations
+    pool = Pool(min(os.cpu_count() or 10, 10))
+
     # Step 3: Hemispheric comparison
     print(f"\n[3/9] Running hemispheric comparison ({len(healpix_dirs)} directions)...")
-    results_h0, results_q0 = exec_map(healpix_dirs, datos)
+    results_h0, results_q0 = exec_map(healpix_dirs, datos, pool=pool)
     h0u, h0d, h0u_err, h0d_err = results_h0
     q0u, q0d, q0u_err, q0d_err = results_q0
 
@@ -144,7 +153,7 @@ def run_pipeline(config_path: str):
         clear_output(wait=True)
         print(f"ISO iteration {i+1}/{p.repetitions}")
         datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown]
-        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm))
+        res_h0, res_q0 = exec_map(healpix_dirs, tuple(datos_lcdm), pool=pool)
         h0u_iso.append(np.array(res_h0[0]))
         h0d_iso.append(np.array(res_h0[1]))
         q0u_iso.append(np.array(res_q0[0]))
@@ -278,6 +287,10 @@ def run_pipeline(config_path: str):
         tables_dir=o.tables,
     )
     print(f"  Tables saved to {o.tables}")
+
+    # Clean up multiprocessing pool
+    pool.close()
+    pool.join()
 
     print("\n" + "=" * 60)
     print("Pipeline complete.")
