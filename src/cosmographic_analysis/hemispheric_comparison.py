@@ -313,26 +313,78 @@ def exec_map(healpix_dirs: np.ndarray, datos: Tuple, save=None, pool: Pool = Non
     return results_h0, results_q0
 
 
-def precompute_hemisphere_data(healpix_dirs: np.ndarray, datos: tuple) -> dict:
+# Module-level shared data for parallel precompute workers
+_WORKER_PRECOMPUTE_DIRS: Optional[np.ndarray] = None
+_WORKER_PRECOMPUTE_V1: Optional[np.ndarray] = None
+_WORKER_PRECOMPUTE_COV: Optional[pd.DataFrame] = None
+
+
+def _init_precompute_worker(dirs, v1, cov):
+    global _WORKER_PRECOMPUTE_DIRS, _WORKER_PRECOMPUTE_V1, _WORKER_PRECOMPUTE_COV
+    _WORKER_PRECOMPUTE_DIRS = dirs
+    _WORKER_PRECOMPUTE_V1 = v1
+    _WORKER_PRECOMPUTE_COV = cov
+
+
+def _precompute_worker(idx: int) -> tuple:
+    healpix_dir = _WORKER_PRECOMPUTE_DIRS[idx]
+    dot_products = np.dot(_WORKER_PRECOMPUTE_V1, healpix_dir)
+    mask_up = dot_products >= 0
+    upi = np.where(mask_up)[0]
+    downi = np.where(~mask_up)[0]
+    inv_cov_up = np.linalg.inv(_WORKER_PRECOMPUTE_COV.iloc[upi, upi].values)
+    inv_cov_down = np.linalg.inv(_WORKER_PRECOMPUTE_COV.iloc[downi, downi].values)
+    return idx, {
+        "up_indices": upi,
+        "down_indices": downi,
+        "inv_cov_up": inv_cov_up,
+        "inv_cov_down": inv_cov_down,
+    }
+
+
+def precompute_hemisphere_data(
+    healpix_dirs: np.ndarray,
+    datos: tuple,
+    n_workers: int = 1,
+) -> dict:
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown = datos
     n = len(healpix_dirs)
-    precomputed = {}
-    print(f"  Precomputing hemisphere data for {n} directions...")
-    for idx, healpix_dir in enumerate(healpix_dirs):
-        if idx > 0 and (idx % 100 == 0 or idx == n - 1):
-            print(f"    [{idx+1}/{n}] directions")
-        dot_products = np.dot(v1, healpix_dir)
-        mask_up = dot_products >= 0
-        upi = np.where(mask_up)[0]
-        downi = np.where(~mask_up)[0]
-        inv_cov_up = np.linalg.inv(cov_mat.iloc[upi, upi].values)
-        inv_cov_down = np.linalg.inv(cov_mat.iloc[downi, downi].values)
-        precomputed[idx] = {
-            "up_indices": upi,
-            "down_indices": downi,
-            "inv_cov_up": inv_cov_up,
-            "inv_cov_down": inv_cov_down,
-        }
+    n_workers = min(n_workers, 8, os.cpu_count() or 8)
+    print(f"  Precomputing hemisphere data for {n} directions (n_workers={n_workers})...")
+
+    if n_workers > 1:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        init_args = (healpix_dirs, v1, cov_mat)
+        precomputed = {}
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            initializer=_init_precompute_worker,
+            initargs=init_args,
+        ) as executor:
+            futures = {executor.submit(_precompute_worker, i): i for i in range(n)}
+            for future in as_completed(futures):
+                idx, data = future.result()
+                precomputed[idx] = data
+                if len(precomputed) % 100 == 0 or len(precomputed) == n:
+                    print(f"    [{len(precomputed)}/{n}] directions")
+    else:
+        precomputed = {}
+        for idx in range(n):
+            if idx > 0 and (idx % 100 == 0 or idx == n - 1):
+                print(f"    [{idx+1}/{n}] directions")
+            dot_products = np.dot(v1, healpix_dirs[idx])
+            mask_up = dot_products >= 0
+            upi = np.where(mask_up)[0]
+            downi = np.where(~mask_up)[0]
+            inv_cov_up = np.linalg.inv(cov_mat.iloc[upi, upi].values)
+            inv_cov_down = np.linalg.inv(cov_mat.iloc[downi, downi].values)
+            precomputed[idx] = {
+                "up_indices": upi,
+                "down_indices": downi,
+                "inv_cov_up": inv_cov_up,
+                "inv_cov_down": inv_cov_down,
+            }
+
     return precomputed
 
 

@@ -240,8 +240,7 @@ def run_pipeline(config_path: str, n_workers: int = 1):
         mu_sample = np.random.normal(mu_fid, sigmuz)
         r1_lcdm[i, :, 5] = mu_sample
 
-    print("  Precomputing hemisphere data for LCDM...")
-    lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos)
+    lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos, n_workers=n_workers)
 
     if n_workers > 1:
         lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed)
