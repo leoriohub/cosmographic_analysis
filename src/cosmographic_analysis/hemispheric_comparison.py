@@ -118,7 +118,7 @@ def hem_h0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
 
 # Hemispheric comparison implementation for q0.
 
-def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, float, float, float]:
+def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save=None) -> Tuple[float, float, float, float]:
     """
     Fits q0 values for the given healpix directions separating data into up and down hemispheres.
 
@@ -127,7 +127,7 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
         datos (Tuple): Tuple containing data arrays (v1, r1, hostyn, cov_mat, h0f, q0f).
 
     Returns:
-        Tuple[float, float,float, float]containing q0u and q0d values and their errors.
+        Tuple[float, float, float, float] containing q0u and q0d values and their errors.
     """
     r1 = datos[0]
     v1 = datos[1]
@@ -135,86 +135,48 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
     cov_mat = datos[3]
     h0f = datos[4]
 
-    # Calculate dot products
     dot_products = np.dot(v1, healpix_dirs)
-
-    # Create masks for dot products
     mask_up = dot_products >= 0
-
-    # Split r1 values based on masks
-    datos_sne_up = r1[mask_up]
-    datos_sne_down = r1[~mask_up]
-
-    # Using numpy's boolean indexing directly instead of np.where
     upi = np.where(mask_up)[0]
     downi = np.where(~mask_up)[0]
 
-    # Split hostyn values based on masks
     hostyn_up = hostyn[mask_up]
     hostyn_down = hostyn[~mask_up]
 
-    # Split z, muceph, and mu_sh0es values
+    datos_sne_up = r1[mask_up]
+    datos_sne_down = r1[~mask_up]
     z_up, z_down = datos_sne_up[:, 2], datos_sne_down[:, 2]
     muceph_up, muceph_down = datos_sne_up[:, 7], datos_sne_down[:, 7]
     mu_sh0es_up, mu_sh0es_down = datos_sne_up[:, 5], datos_sne_down[:, 5]
 
     ############ COV MATRIX ############
-    newcovmatu = cov_mat.iloc[upi, upi].values  # Using iloc for indexing
-    inv_newcovu = np.linalg.inv(newcovmatu)
-
-    newcovmatd = cov_mat.iloc[downi, downi].values  # Using iloc for indexing
-    inv_newcovd = np.linalg.inv(newcovmatd)
+    inv_newcovu = np.linalg.inv(cov_mat.iloc[upi, upi].values)
+    inv_newcovd = np.linalg.inv(cov_mat.iloc[downi, downi].values)
     #################
 
     def chi2uq0(theta):
-        """
-        Calculate chi2 for up hemisphere values.
-
-        Args:
-            theta (array-like): Array containing q0 value.
-
-        Returns:
-            float: Ar value.
-        """
-        q0 = theta[0]  # theta is a 1-element array, extract the value
+        q0 = theta[0]
         mu_model_up = mu(z_up, h0f, q0)
-
         resid_up = np.zeros(len(datos_sne_up))
         resid_up[hostyn_up == 1] = muceph_up[hostyn_up == 1] - mu_model_up[hostyn_up == 1]
         resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
+        return np.dot(resid_up, np.dot(inv_newcovu, resid_up))
 
-        Ar = np.dot(resid_up, np.dot(inv_newcovu, resid_up))
-        return Ar
-
-    # Minimize chi2uq0 function to find q0u
     chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
     q0u = chi2umin.x[0]
-    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0])  # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
 
     def chi2dq0(theta):
-        """
-
-        Calculate the chi2 value for down q0 hemisphere.
-
-        Args:
-            theta (array-like): Array containing q0 value.
-
-        Returns:
-            float: Ar value.
-        """
-        q0 = theta[0]  # theta is a 1-element array, extract the value
+        q0 = theta[0]
         mu_model_down = mu(z_down, h0f, q0)
-
         resid_down = np.zeros(len(datos_sne_down))
         resid_down[hostyn_down == 1] = muceph_down[hostyn_down == 1] - mu_model_down[hostyn_down == 1]
         resid_down[hostyn_down == 0] = mu_sh0es_down[hostyn_down == 0] - mu_model_down[hostyn_down == 0]
-
-        Ar = np.dot(resid_down, np.dot(inv_newcovd, resid_down))
-        return Ar
+        return np.dot(resid_down, np.dot(inv_newcovd, resid_down))
 
     chi2dmin = minimize(chi2dq0, [-0.5], method='L-BFGS-B')
     q0d = chi2dmin.x[0]
-    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])  # error is defined as the sqrt of the diagonal elements of the inverse Hessian matrix
+    q0d_err = np.sqrt(chi2dmin.hess_inv([1])[0])
 
     return q0u, q0d, q0u_err, q0d_err
 
@@ -224,6 +186,12 @@ def hem_q0(healpix_dirs: np.ndarray, datos: Tuple, save = None) -> Tuple[float, 
 # Healpix_dirs is a list of directions which represent each pixel in the healpix pixelation scheme.
 
 def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save=None):
+    """
+    Fit h0 and q0 for a HEALPix direction, sharing covariance inversions.
+
+    Merges hem_h0 + hem_q0 to avoid redundant np.linalg.inv calls
+    (they computed identical inverse matrices independently).
+    """
     r1 = datos[0]
     v1 = datos[1]
     hostyn = datos[2]
@@ -285,9 +253,9 @@ def multi_hem_map(healpix_vec: np.ndarray, datos: Tuple, save=None):
         resid_up[hostyn_up == 0] = mu_sh0es_up[hostyn_up == 0] - mu_model_up[hostyn_up == 0]
         return np.dot(resid_up, np.dot(inv_newcovu, resid_up))
 
-    chi2umin = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
-    q0u = chi2umin.x[0]
-    q0u_err = np.sqrt(chi2umin.hess_inv([1])[0])
+    chi2umin_q0 = minimize(chi2uq0, [-0.5], method='L-BFGS-B')
+    q0u = chi2umin_q0.x[0]
+    q0u_err = np.sqrt(chi2umin_q0.hess_inv([1])[0])
 
     def chi2dq0(theta):
         q0 = theta[0]
