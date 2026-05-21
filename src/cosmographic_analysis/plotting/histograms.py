@@ -109,7 +109,7 @@ def plot_histograms(data_h0: list, data_q0: list, filename = None, titlemarker =
     ax4[1].set_title(f'$Δq_0^{{max}}$ {titlemarker}-Realizations')
     plt.tight_layout()
     if filename != None :
-        plt.savefig(f'histograms/{filename}')
+        plt.savefig(filename)
     plt.show()
 
     
@@ -165,5 +165,5 @@ def plot_both_histograms(data_h0: list, data_q0: list, filename = None) -> None:
     plt.tight_layout()
     
     if filename != None :
-        plt.savefig(f'histograms/{filename}')
+        plt.savefig(filename)
     plt.show()   
