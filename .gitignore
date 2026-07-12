@@ -37,3 +37,9 @@ tables/
 
 # Marimo auto-generated
 __marimo__/
+
+# Agent plan files
+.omo/
+
+# Benchmarks (meant to be run manually, not versioned)
+benchmarks/
