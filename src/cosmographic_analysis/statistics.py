@@ -79,7 +79,12 @@ def map_statistics(h0: np.ndarray, q0: np.ndarray, delta_h0_data_max: np.ndarray
 
 def mc_statistics(maximum_anisotropy_data: np.ndarray, maximum_anisotropy_mc: np.ndarray) -> list :
     """
-    Calculate and print Monte Carlo statistics.
+    Calculate and print Monte Carlo p-values.
+
+    p-value = percentage of MC iterations where the simulated anisotropy
+    exceeds the observed value. A small p-value (close to 0%) indicates
+    the observed anisotropy is significantly larger than expected under
+    the null hypothesis.
 
     Args: Receives an array of maximum anisotropy values for LCDM and ISO iterations.
     

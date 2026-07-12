@@ -80,4 +80,4 @@ def DecRaToIndex(nside, dec, ra):
         int: The healpix index corresponding to the given declination and right ascension angles.
     """
     
-    index = hp.ang2pix(nside, np.radians(90 - dec), np.radians(ra))
+    return hp.ang2pix(nside, np.radians(90 - dec), np.radians(ra))
