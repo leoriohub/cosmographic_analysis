@@ -42,8 +42,9 @@ def load_pantheon_data(
     cov_z = cov_z[np.ix_(ind, ind)]
     inv_cov_z = np.linalg.inv(cov_z)
     cov_mat = pd.DataFrame(cov_z, columns=range(len(zz)))
+    cov_numpy = cov_mat.values.copy()
 
-    return zz, mz, sigmz, muz, sigmuz, ra, dec, muceph, hostyn, cov_mat, inv_cov_z
+    return zz, mz, sigmz, muz, sigmuz, ra, dec, muceph, hostyn, cov_mat, inv_cov_z, cov_numpy
 
 
 def build_datos_tuple(
@@ -62,6 +63,7 @@ def build_datos_tuple(
     pts: int,
     zup: float,
     zdown: float,
+    cov_numpy: np.ndarray,
 ) -> Tuple:
     """Build the 'datos' tuple used by hemispheric comparison functions.
 
@@ -69,5 +71,5 @@ def build_datos_tuple(
     """
     r1 = np.column_stack([ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn])
     v1 = DecRa2Cartesian(dec, ra)
-    datos = (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown)
+    datos = (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy)
     return datos
