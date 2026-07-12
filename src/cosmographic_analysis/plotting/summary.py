@@ -7,7 +7,6 @@ renders a clean table image (for papers/documents).
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 
@@ -26,12 +25,20 @@ def save_summary_tables(
     pts: int,
     n_rep: int,
     tables_dir: str,
+    optimizer: str = "golden",
 ):
     """Save summary tables as CSV and rendered PNG images.
 
     Produces two tables (h0 and q0) with observed anisotropy,
     ISO p-values, and LCDM p-values. Each table is saved as
     a CSV file and a formatted PNG image.
+
+    Parameters
+    ----------
+    optimizer : str
+        Optimizer name used in the analysis (e.g. 'golden' or 'brent').
+        Included in the output filename suffix.
+
     """
     tables_path = Path(tables_dir)
     tables_path.mkdir(parents=True, exist_ok=True)
@@ -56,6 +63,7 @@ def save_summary_tables(
         f"({h0f}=h0f_{q0f}=q0f)"
         f"_({zup}>z>{zdown})"
         f"({pts}_pts)_({n_rep})_rep_"
+        f"(method={optimizer})"
     )
 
     for label, data in [("h0", h0_data), ("q0", q0_data)]:

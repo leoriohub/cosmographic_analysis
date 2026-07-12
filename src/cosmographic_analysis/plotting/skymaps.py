@@ -3,12 +3,12 @@
 Generates all-sky maps of best-fit h0 and q0 values using HEALPix.
 """
 
+import healpy as hp
 import matplotlib.pyplot as plt
 import numpy as np
-import healpy as hp
 
-from cosmographic_analysis.maps import generate_map
 from cosmographic_analysis.config import Config
+from cosmographic_analysis.maps import generate_map
 
 
 def plot_h0_q0_maps(
@@ -20,10 +20,20 @@ def plot_h0_q0_maps(
     h0f: float,
     q0f: float,
     config: Config,
+    optimizer: str = "golden",
 ) -> str:
     """Generate and save Mollweide sky maps for h0 and q0.
 
-    Returns the path to the saved figure.
+    Parameters
+    ----------
+    optimizer : str, optional
+        Optimization method used (default 'golden'). Included in output filename.
+
+    Returns
+    -------
+    str
+        Path to the saved figure.
+
     """
     h0map, q0map = generate_map(nside, theta, phi, h0, q0)
     p = config.parameters
@@ -32,14 +42,14 @@ def plot_h0_q0_maps(
     plt.figure(figsize=(6, 7))
     hp.mollview(
         h0map, coord="cg",
-        title=rf'$h_0$ map (fixed $q_0$={q0f})',
+        title=rf"$h_0$ map (fixed $q_0$={q0f})",
         unit="", notext=True, norm="hist", cmap="jet",
         min=min(h0map), max=max(h0map),
         fig=1, sub=(1, 2, 1),
     )
     hp.mollview(
         q0map, coord="cg",
-        title=rf'$q_0$ map (fixed $h_0$={h0f})',
+        title=rf"$q_0$ map (fixed $h_0$={h0f})",
         unit="", notext=True, norm="hist", cmap="jet",
         min=min(q0map), max=max(q0map),
         fig=1, sub=(2, 2, 1),
@@ -47,7 +57,8 @@ def plot_h0_q0_maps(
 
     map_filename = (
         f"{o.figures}{p.prefix_name}[VERTICAL]"
-        f"(hf={h0f}_qf={q0f})({p.zup}>z>{p.zdown}).png"
+        f"(hf={h0f}_qf={q0f})({p.zup}>z>{p.zdown})"
+        f"(method={optimizer}).png"
     )
     plt.savefig(map_filename, dpi=400, bbox_inches="tight")
     plt.close()
