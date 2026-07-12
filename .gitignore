@@ -28,3 +28,12 @@ docs/superpowers/plans/
 
 # OpenCode local config (agent-specific, has node_modules)
 .opencode/
+
+# Generated pipeline output
+compilations/
+figures/
+histograms/
+tables/
+
+# Marimo auto-generated
+__marimo__/
