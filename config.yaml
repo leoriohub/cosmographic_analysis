@@ -24,6 +24,9 @@ parameters:
   # File naming prefix
   prefix_name: '[SH0ES_CALIB]'
 
+  # Distance model: taylor2 (y^2 Taylor, default), pade11 (P[1/1] in y), pade21 (P[2/1], j0=1)
+  model: taylor2
+
 output:
   # Output directories (relative to project root)
   compilations: compilations/

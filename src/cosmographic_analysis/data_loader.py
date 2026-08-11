@@ -64,12 +64,16 @@ def build_datos_tuple(
     zup: float,
     zdown: float,
     cov_numpy: np.ndarray,
+    model: int = 0,
 ) -> Tuple:
     """Build the 'datos' tuple used by hemispheric comparison functions.
 
     Replicates main.ipynb data packaging logic.
+
+    Tuple layout (11 elements):
+    (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model)
     """
     r1 = np.column_stack([ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn])
     v1 = DecRa2Cartesian(dec, ra)
-    datos = (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy)
+    datos = (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model)
     return datos

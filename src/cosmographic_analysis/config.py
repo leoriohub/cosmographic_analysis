@@ -24,6 +24,7 @@ class ParametersConfig:
     zdown: float = 0.01
     repetitions: int = 500
     prefix_name: str = "[SH0ES_CALIB]"
+    model: str = "taylor2"
 
 
 @dataclass
