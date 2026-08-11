@@ -17,12 +17,12 @@ _GPU_REASON = "GPU routing tests require CuPy"
 
 def _make_datos(n_sne=3):
     """Create a minimal valid datos tuple for multi_hem_map_numba routing tests."""
-    # (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy)
+    # (r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model)
     r1 = np.zeros((n_sne, 9), dtype=np.float64)
     v1 = np.random.randn(n_sne, 3).astype(np.float64)
     hostyn = np.zeros(n_sne, dtype=np.int64)
     cov_numpy = np.eye(n_sne, dtype=np.float64)
-    return (r1, v1, hostyn, None, 0.7, -0.5, 12, 0.1, 0.01, cov_numpy)
+    return (r1, v1, hostyn, None, 0.7, -0.5, 12, 0.1, 0.01, cov_numpy, 0)
 
 
 @pytest.mark.skipif(not HAVE_CUPY, reason=_GPU_REASON)
@@ -30,7 +30,7 @@ def test_exec_map_numba_routes_woodbury():
     """When method='woodbury', _exec_map_numba_woodbury is called."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_woodbury') as mock:
-        exec_map_numba(_DIRS, (None,) * 10, method='woodbury')
+        exec_map_numba(_DIRS, (None,) * 11, method='woodbury')
         mock.assert_called_once()
 
 
@@ -39,7 +39,7 @@ def test_exec_map_numba_routes_woodbury_cholesky():
     """When method='woodbury-cholesky', _exec_map_numba_woodbury is called with use_woodbury_chi2=False."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_woodbury') as mock:
-        exec_map_numba(_DIRS, (None,) * 10, method='woodbury-cholesky')
+        exec_map_numba(_DIRS, (None,) * 11, method='woodbury-cholesky')
         mock.assert_called_once()
         _, kwargs = mock.call_args
         assert kwargs.get('use_woodbury_chi2') is False, \
@@ -51,7 +51,7 @@ def test_exec_map_numba_routes_grid():
     """When method='grid', _exec_map_numba_gpu_grid is called."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_gpu_grid') as mock:
-        exec_map_numba(_DIRS, (None,) * 10, method='grid')
+        exec_map_numba(_DIRS, (None,) * 11, method='grid')
         mock.assert_called_once()
 
 
@@ -60,7 +60,7 @@ def test_exec_map_fixed_numba_routes_woodbury():
     """When method='woodbury', exec_map_fixed_numba calls _exec_map_numba_woodbury."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_woodbury') as mock:
-        exec_map_fixed_numba(_DIRS, (None,) * 10, {}, method='woodbury')
+        exec_map_fixed_numba(_DIRS, (None,) * 11, {}, method='woodbury')
         mock.assert_called_once()
 
 
@@ -69,7 +69,7 @@ def test_exec_map_fixed_numba_routes_woodbury_cholesky():
     """When method='woodbury-cholesky', exec_map_fixed_numba routes with use_woodbury_chi2=False."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_woodbury') as mock:
-        exec_map_fixed_numba(_DIRS, (None,) * 10, {}, method='woodbury-cholesky')
+        exec_map_fixed_numba(_DIRS, (None,) * 11, {}, method='woodbury-cholesky')
         mock.assert_called_once()
         _, kwargs = mock.call_args
         assert kwargs.get('use_woodbury_chi2') is False, \
@@ -81,7 +81,7 @@ def test_exec_map_fixed_numba_routes_grid():
     """When method='grid', exec_map_fixed_numba calls _exec_map_numba_gpu_grid."""
     from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba
     with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_gpu_grid') as mock:
-        exec_map_fixed_numba(_DIRS, (None,) * 10, {}, method='grid')
+        exec_map_fixed_numba(_DIRS, (None,) * 11, {}, method='grid')
         mock.assert_called_once()
 
 

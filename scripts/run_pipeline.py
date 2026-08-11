@@ -32,9 +32,9 @@ def _init_iso_worker(data):
 
 def _iso_worker_task(v1_it):
     from cosmographic_analysis.hemispheric_comparison import exec_map_numba as _exec_numba
-    r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, method, cov_numpy = _WORKER_ISO_DATA
+    r1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, method, cov_numpy, model_code = _WORKER_ISO_DATA
     try:
-        datos = [r1, v1_it, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy]
+        datos = [r1, v1_it, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model_code]
         res_h0, res_q0 = _exec_numba(healpix_dirs, tuple(datos), n_workers=1, method=method)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
@@ -56,9 +56,9 @@ def _init_lcdm_worker(data):
 
 def _lcdm_worker_task(r1_it):
     from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba as _exec_fixed_numba
-    v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed, method, cov_np = _WORKER_LCDM_DATA
+    v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, healpix_dirs, precomputed, method, cov_np, model_code = _WORKER_LCDM_DATA
     try:
-        datos = [r1_it, v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, cov_np]
+        datos = [r1_it, v1, hostyn_arr, cov_mat, h0f, q0f, pts, zup, zdown, cov_np, model_code]
         res_h0, res_q0 = _exec_fixed_numba(healpix_dirs, tuple(datos), precomputed, n_workers=1, method=method)
         h0u = np.array(res_h0[0])
         h0d = np.array(res_h0[1])
@@ -75,6 +75,7 @@ from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
 from cosmographic_analysis.coordinates import get_healpix_vectors, IndexToDecRa
 from cosmographic_analysis.hemispheric_comparison import exec_map_numba, precompute_hemisphere_data, exec_map_fixed_numba
+from cosmographic_analysis.cosmology import mu_model, MODEL_CODES
 from cosmographic_analysis.anisotropy import get_max_anisotropy
 from cosmographic_analysis.maps import generate_map
 from cosmographic_analysis.dw_statistic import hemispheric_dw, total_dw
@@ -84,12 +85,17 @@ from cosmographic_analysis.plotting.skymaps import plot_h0_q0_maps
 from cosmographic_analysis.plotting.summary import save_summary_tables
 
 
-def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury', run_sims: bool = True, n_reps: Optional[int] = None, nside: Optional[int] = None):
+def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury', run_sims: bool = True, n_reps: Optional[int] = None, nside: Optional[int] = None, model: Optional[str] = None):
     config = load_config(config_path)
     if n_reps is not None:
         config.parameters.repetitions = n_reps
     if nside is not None:
         config.parameters.nside = nside
+    if model is not None:
+        config.parameters.model = model
+    if config.parameters.model not in MODEL_CODES:
+        raise ValueError(f"Unknown model '{config.parameters.model}'. Valid: {sorted(MODEL_CODES)}")
+    model_code = MODEL_CODES[config.parameters.model]
     ensure_output_dirs(config)
     p = config.parameters
     d = config.data
@@ -101,10 +107,11 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
     print(f"  nside={p.nside}, h0f={p.h0f}, q0f={p.q0f}")
     print(f"  redshift range: {p.zdown} < z < {p.zup}")
     print(f"  repetitions: {p.repetitions}")
-    print(f"  n_workers: {n_workers}, optimizer: {optimizer}")
+    print(f"  n_workers: {n_workers}, optimizer: {optimizer}, model: {p.model}")
     print(f"  simulations: {'yes' if run_sims else 'no (--no-sims)'}")
     print("=" * 60)
     _opt_tag = f"(method={optimizer})"
+    _model_tag = f"(model={p.model})"
 
     # Step 1: Load data
     print("\n[1/9] Loading Pantheon+ data...")
@@ -116,9 +123,9 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
     pts = hp.nside2npix(p.nside)
     datos = build_datos_tuple(
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
-        cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy,
+        cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code,
     )
-    r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
+    r1, v1, hostyn_arr, _, _, _, _, _, _, _, _ = datos
 
     # Step 2: Get HEALPix vectors
     print("\n[2/9] Computing HEALPix vectors...")
@@ -193,7 +200,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
             v1_iso[i] = vecti
 
         if n_workers > 1:
-            iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, optimizer, cov_numpy)
+            iso_shared = (r1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, optimizer, cov_numpy, model_code)
             n_iso_workers = min(n_workers, p.repetitions)
 
             if optimizer in ('grid', 'woodbury', 'woodbury-cholesky'):
@@ -217,7 +224,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
                 try:
                     if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                         print(f"  ISO [{i+1}/{p.repetitions}]")
-                    datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy]
+                    datos_lcdm = [r1, v1_it, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code]
                     res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=1, method=optimizer)
                     h0u = np.array(res_h0[0])
                     h0d = np.array(res_h0[1])
@@ -241,15 +248,13 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
         )
         filename_iso = (
             f"{o.compilations}{p.prefix_name}[ISO]({p.h0f}=h0f_{p.q0f}=q0f)"
-            f"({p.repetitions}_rep)({pts}_pts)({p.zup}>z>{p.zdown}){_opt_tag}.txt"
+            f"({p.repetitions}_rep)({pts}_pts)({p.zup}>z>{p.zdown}){_opt_tag}{_model_tag}.txt"
         )
         np.savetxt(filename_iso, np.column_stack([delta_h0_iso_max, delta_q0_iso_max]), header=header_iso)
 
         # Step 8: Synthetic LCDM simulation
         print(f"\n[8/9] LCDM simulation ({p.repetitions} repetitions)...")
-        from cosmographic_analysis.cosmology import mu
-
-        mu_fid = np.array([mu(zi, p.h0f, p.q0f) for zi in zz])
+        mu_fid = np.array([mu_model(zi, p.h0f, p.q0f, model_code) for zi in zz])
         r1_lcdm = np.tile(r1, (p.repetitions, 1, 1))
 
         for i in range(p.repetitions):
@@ -259,7 +264,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
         lcdm_precomputed = precompute_hemisphere_data(healpix_dirs, datos, n_workers=n_workers, cov_numpy=cov_numpy)
 
         if n_workers > 1:
-            lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed, optimizer, cov_numpy)
+            lcdm_shared = (v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, healpix_dirs, lcdm_precomputed, optimizer, cov_numpy, model_code)
             n_lcdm_workers = min(n_workers, p.repetitions)
             with Pool(n_lcdm_workers, initializer=_init_lcdm_worker, initargs=(lcdm_shared,)) as lcdm_pool:
                 print(f"  Running {p.repetitions} iterations with {n_lcdm_workers} workers...")
@@ -274,7 +279,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
                 try:
                     if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
                         print(f"  LCDM [{i+1}/{p.repetitions}]")
-                    datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy]
+                    datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code]
                     res_h0, res_q0 = exec_map_fixed_numba(healpix_dirs, tuple(datos_lcdm), lcdm_precomputed, n_workers=1, method=optimizer)
                     h0u = np.array(res_h0[0])
                     h0d = np.array(res_h0[1])
@@ -298,7 +303,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
         )
         filename_lcdm = (
             f"{o.compilations}{p.prefix_name}[LCDM]({p.h0f}=h0f_{p.q0f}=q0f)"
-            f"({p.repetitions}_rep)({pts}_pts)({p.zup}>z>{p.zdown}){_opt_tag}.txt"
+            f"({p.repetitions}_rep)({pts}_pts)({p.zup}>z>{p.zdown}){_opt_tag}{_model_tag}.txt"
         )
         np.savetxt(
             filename_lcdm,
@@ -319,7 +324,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
 
         data_h0_iso_hist = [delta_h0_iso_max, delta_h0_data_max, x_gauss_h0_iso, y_gauss_h0_iso]
         data_q0_iso_hist = [delta_q0_iso_max, delta_q0_data_max, x_gauss_q0_iso, y_gauss_q0_iso]
-        file_name_iso = f"{o.histograms}[ISO](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}.png"
+        file_name_iso = f"{o.histograms}[ISO](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}{_model_tag}.png"
         plot_histograms(data_h0_iso_hist, data_q0_iso_hist, filename=file_name_iso)
 
         x_gauss_h0_lcdm, y_gauss_h0_lcdm = fit_gaussian(delta_h0_lcdm_max_clean)
@@ -327,12 +332,12 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
 
         data_h0_lcdm_hist = [delta_h0_lcdm_max, delta_h0_data_max, x_gauss_h0_lcdm, y_gauss_h0_lcdm]
         data_q0_lcdm_hist = [delta_q0_lcdm_max, delta_q0_data_max, x_gauss_q0_lcdm, y_gauss_q0_lcdm]
-        file_name_lcdm = f"{o.histograms}[LCDM](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}.png"
+        file_name_lcdm = f"{o.histograms}[LCDM](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}{_model_tag}.png"
         plot_histograms(data_h0_lcdm_hist, data_q0_lcdm_hist, titlemarker="LCDM", filename=file_name_lcdm)
 
         data_h0_both = [delta_h0_iso_max, delta_h0_lcdm_max, delta_h0_data_max]
         data_q0_both = [delta_q0_iso_max, delta_q0_lcdm_max, delta_q0_data_max]
-        file_name_both = f"{o.histograms}[BOTH](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}.png"
+        file_name_both = f"{o.histograms}[BOTH](hf={p.h0f}_qf={p.q0f})({p.repetitions})_rep_({p.zup}>z>{p.zdown}){_opt_tag}{_model_tag}.png"
         plot_both_histograms(data_h0_both, data_q0_both, filename=file_name_both)
 
         maximum_anisotropy_data = np.array([delta_h0_data_max, delta_q0_data_max])
@@ -347,7 +352,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
 
     # Step 10: Sky maps
     print("\n[10/11] Generating sky maps...")
-    map_path = plot_h0_q0_maps(p.nside, theta, phi, h0, q0, p.h0f, p.q0f, config, optimizer=optimizer)
+    map_path = plot_h0_q0_maps(p.nside, theta, phi, h0, q0, p.h0f, p.q0f, config, optimizer=optimizer, model=p.model)
     print(f"  Map saved: {map_path}")
 
     # Step 11: Summary tables
@@ -368,6 +373,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
         n_rep=p.repetitions,
         tables_dir=o.tables,
         optimizer=optimizer,
+        model=p.model,
     )
     print(f"  Tables saved to {o.tables}")
 
@@ -394,13 +400,16 @@ def run_comparison(config_path, n_workers, optimizer_list):
     ensure_output_dirs(config)
     p = config.parameters
     d = config.data
+    if p.model not in MODEL_CODES:
+        raise ValueError(f"Unknown model '{p.model}'. Valid: {sorted(MODEL_CODES)}")
+    model_code = MODEL_CODES[p.model]
 
     print("=" * 60)
     print("Multi-Method Comparison")
     print("=" * 60)
     print(f"  nside={p.nside}, h0f={p.h0f}, q0f={p.q0f}")
     print(f"  redshift range: {p.zdown} < z < {p.zup}")
-    print(f"  optimizers: {optimizer_list}")
+    print(f"  optimizers: {optimizer_list}, model: {p.model}")
     print("=" * 60)
 
     # Load data once
@@ -412,7 +421,7 @@ def run_comparison(config_path, n_workers, optimizer_list):
     pts = hp.nside2npix(p.nside)
     datos = build_datos_tuple(
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
-        cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy,
+        cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code,
     )
 
     healpix_dirs = get_healpix_vectors(p.nside)
@@ -460,6 +469,8 @@ def main():
                              "or 'scipy' (generic nD)")
     parser.add_argument("--nside", type=int, default=None,
                         help="HEALPix Nside parameter (default: from config.yaml, usually 8)")
+    parser.add_argument("--model", choices=["taylor2", "pade11", "pade21"], default=None,
+                        help="Distance model (default: from config.yaml)")
     parser.add_argument("--repetitions", type=int, default=None,
                         help="Override number of MC simulation repetitions (default: from config.yaml, usually 500)")
     parser.add_argument("--no-sims", action="store_true",
@@ -477,7 +488,7 @@ def main():
     if args.compare is not None:
         run_comparison(args.config, args.n_workers, args.compare)
     else:
-        run_pipeline(args.config, args.n_workers, args.optimizer, run_sims=not args.no_sims, n_reps=override_reps, nside=override_nside)
+        run_pipeline(args.config, args.n_workers, args.optimizer, run_sims=not args.no_sims, n_reps=override_reps, nside=override_nside, model=args.model)
 
 
 if __name__ == "__main__":
