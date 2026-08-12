@@ -77,7 +77,7 @@ from cosmographic_analysis.coordinates import get_healpix_vectors, IndexToDecRa
 from cosmographic_analysis.hemispheric_comparison import exec_map_numba, precompute_hemisphere_data, exec_map_fixed_numba
 from cosmographic_analysis.cosmology import mu_model, MODEL_CODES
 from cosmographic_analysis.anisotropy import get_max_anisotropy
-from cosmographic_analysis.maps import generate_map
+from cosmographic_analysis.maps import generate_map, dirs_to_theta_phi
 from cosmographic_analysis.dw_statistic import hemispheric_dw, total_dw
 from cosmographic_analysis.statistics import fit_gaussian, mc_statistics
 from cosmographic_analysis.plotting.histograms import plot_histograms, plot_both_histograms
@@ -175,8 +175,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
 
     # Step 5: Generate maps
     print("\n[5/9] Generating sky maps...")
-    theta = np.arccos(hdirs[:, 2])
-    phi = np.radians(180) - np.arctan2(hdirs[:, 1], hdirs[:, 0])
+    theta, phi = dirs_to_theta_phi(hdirs)
 
     h0map, q0map = generate_map(p.nside, theta, phi, h0, q0)
     print(f"  Maps generated: h0map ({h0map.size} pixels), q0map ({q0map.size} pixels)")

@@ -35,6 +35,24 @@ def generate_map(nside: int, theta: np.ndarray, phi: np.ndarray, h0: np.ndarray,
     return h0map, q0map
 
 
+def dirs_to_theta_phi(dirs: np.ndarray) -> tuple:
+    """Convert unit direction vectors to healpy (theta, phi) spherical coordinates.
+
+    theta = arccos(z) (colatitude, 0 at the north pole), phi = arctan2(y, x)
+    wrapped to [0, 2*pi). This matches healpy's pix2vec/vec2ang convention, so
+    a value computed for direction n̂ lands on the map pixel representing n̂.
+
+    Args:
+        dirs (np.ndarray): (N, 3) array of unit vectors.
+
+    Returns:
+        tuple: (theta, phi) arrays in radians, each of length N.
+    """
+    theta = np.arccos(dirs[:, 2])
+    phi = np.arctan2(dirs[:, 1], dirs[:, 0]) % (2.0 * np.pi)
+    return theta, phi
+
+
 def load_hubble_data(file_path):
     # Load data using numpy, skipping the first 3 lines (2 header lines + 1 line of column names)
     data = np.loadtxt(file_path, skiprows=3)
