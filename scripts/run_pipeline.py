@@ -171,7 +171,7 @@ def run_pipeline(config_path: str, n_workers: int = 1, optimizer: str = 'woodbur
 
     bestfit_data = [np.array(h0u), np.array(h0d), np.array(q0u), np.array(q0d)]
     max_anis_dir = get_max_anisotropy(bestfit_data, healpix_dirs)
-    print(f"  Max anisotropy direction (dec, ra) for q0: {max_anis_dir[0]}")
+    print(f"  Max anisotropy direction (dec, ra) for q0: {max_anis_dir[1]}")
 
     # Step 5: Generate maps
     print("\n[5/9] Generating sky maps...")

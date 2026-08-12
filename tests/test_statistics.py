@@ -38,3 +38,25 @@ def test_mc_statistics_data_at_median_gives_around_fifty_pct():
         maximum_anisotropy_mc=np.array([mc, mc, mc, mc]),
     )
     assert p_values[2] == pytest.approx(50.0, abs=5.0)
+
+
+def test_hemispheric_dw_uses_model_from_datos():
+    """hemispheric_dw respects datos[10] (regression: it used legacy taylor2)."""
+    from cosmographic_analysis.dw_statistic import hemispheric_dw
+
+    rng = np.random.default_rng(1)
+    n = 12
+    r1 = np.zeros((n, 9), dtype=np.float64)
+    r1[:, 2] = np.linspace(0.02, 0.08, n)  # z
+    r1[:, 5] = 40.0  # mu_sh0es
+    r1[:, 7] = 40.0  # muceph
+    v1 = rng.normal(size=(n, 3)).astype(np.float64)
+    h = v1[0] / np.linalg.norm(v1[0])
+    hostyn = np.zeros(n, dtype=np.int64)
+    cov = np.eye(n, dtype=np.float64)
+
+    dw_t2 = hemispheric_dw(h, (r1, v1, hostyn, None, 0.7, -0.5, 12, 0.1, 0.01, cov, 0))
+    dw_p21 = hemispheric_dw(h, (r1, v1, hostyn, None, 0.7, -0.5, 12, 0.1, 0.01, cov, 2))
+    assert all(np.isfinite(x) for x in dw_t2)
+    assert all(np.isfinite(x) for x in dw_p21)
+    assert not np.allclose(dw_t2, dw_p21), "DW must depend on the selected model"

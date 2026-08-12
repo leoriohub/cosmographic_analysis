@@ -1188,7 +1188,7 @@ def exec_map_numba(healpix_dirs: np.ndarray, datos: tuple, save=None, pool: Pool
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
-    if HAVE_CUPY and n_workers <= 1 and pool is None:
+    if HAVE_CUPY and n_workers <= 1 and pool is None and method != "scipy":
         if method == "woodbury":
             _print_once("entry_woodbury", f"  [Woodbury] Processing {n} directions...")
             return _exec_map_numba_woodbury(healpix_dirs, datos, save, use_woodbury_chi2=True)
@@ -1288,7 +1288,7 @@ def exec_map_fixed_numba(healpix_dirs: np.ndarray, datos: tuple, precomputed: di
     r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
-    if HAVE_CUPY and n_workers <= 1 and pool is None:
+    if HAVE_CUPY and n_workers <= 1 and pool is None and method != "scipy":
         if method == "woodbury":
             _print_once("lcdm_woodbury", f"  [Woodbury] Processing {n} LCDM directions...")
             return _exec_map_numba_woodbury(healpix_dirs, datos, use_woodbury_chi2=True)
