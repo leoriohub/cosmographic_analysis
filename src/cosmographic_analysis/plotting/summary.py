@@ -26,6 +26,7 @@ def save_summary_tables(
     n_rep: int,
     tables_dir: str,
     optimizer: str = "golden",
+    model: str = "taylor2",
 ):
     """Save summary tables as CSV and rendered PNG images.
 
@@ -37,6 +38,9 @@ def save_summary_tables(
     ----------
     optimizer : str
         Optimizer name used in the analysis (e.g. 'golden' or 'brent').
+        Included in the output filename suffix.
+    model : str
+        Distance model name (e.g. 'taylor2' or 'pade21').
         Included in the output filename suffix.
 
     """
@@ -63,7 +67,7 @@ def save_summary_tables(
         f"({h0f}=h0f_{q0f}=q0f)"
         f"_({zup}>z>{zdown})"
         f"({pts}_pts)_({n_rep})_rep_"
-        f"(method={optimizer})"
+        f"(method={optimizer})(model={model})"
     )
 
     for label, data in [("h0", h0_data), ("q0", q0_data)]:

@@ -19,6 +19,7 @@ import healpy as hp
 from cosmographic_analysis.config import load_config
 from cosmographic_analysis.data_loader import load_pantheon_data
 from cosmographic_analysis.coordinates import get_healpix_vectors
+from cosmographic_analysis.cosmology import MODEL_CODES
 from cosmographic_analysis.hemispheric_comparison import exec_map_numba
 from cosmographic_analysis.statistics import fit_gaussian
 from cosmographic_analysis.plotting.histograms import plot_histograms
@@ -28,6 +29,7 @@ def run_iso(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury'):
     config = load_config(config_path)
     p = config.parameters
     d = config.data
+    model_code = MODEL_CODES[p.model]
 
     print(f"Loading data (z range: {p.zdown} < z < {p.zup})...")
     zz, mz, sigmz, muz, sigmuz, ra, dec, muceph, hostyn, cov_mat, inv_cov_z, cov_numpy = \
@@ -48,7 +50,7 @@ def run_iso(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury'):
     for i, v1_it in enumerate(v1_iso):
         if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
             print(f"  [{i+1}/{p.repetitions}]")
-        datos_lcdm = [r1, v1_it, hostyn, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy]
+        datos_lcdm = [r1, v1_it, hostyn, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code]
         res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=n_workers, method=optimizer)
         h0u_all.append(np.array(res_h0[0]))
         h0d_all.append(np.array(res_h0[1]))
@@ -65,7 +67,7 @@ def run_iso(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury'):
     plot_histograms(
         [delta_h0_max, 0, x_h0, y_h0],
         [delta_q0_max, 0, x_q0, y_q0],
-        filename=f"{config.output.histograms}[ISO](hf={p.h0f}_qf={p.q0f}).png",
+        filename=f"{config.output.histograms}[ISO](hf={p.h0f}_qf={p.q0f})(model={p.model}).png",
     )
     print("ISO simulation complete.")
 

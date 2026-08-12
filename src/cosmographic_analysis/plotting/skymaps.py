@@ -21,6 +21,7 @@ def plot_h0_q0_maps(
     q0f: float,
     config: Config,
     optimizer: str = "golden",
+    model: str = "taylor2",
 ) -> str:
     """Generate and save Mollweide sky maps for h0 and q0.
 
@@ -28,6 +29,8 @@ def plot_h0_q0_maps(
     ----------
     optimizer : str, optional
         Optimization method used (default 'golden'). Included in output filename.
+    model : str, optional
+        Distance model used (default 'taylor2'). Included in output filename.
 
     Returns
     -------
@@ -58,7 +61,7 @@ def plot_h0_q0_maps(
     map_filename = (
         f"{o.figures}{p.prefix_name}[VERTICAL]"
         f"(hf={h0f}_qf={q0f})({p.zup}>z>{p.zdown})"
-        f"(method={optimizer}).png"
+        f"(method={optimizer})(model={model}).png"
     )
     plt.savefig(map_filename, dpi=400, bbox_inches="tight")
     plt.close()

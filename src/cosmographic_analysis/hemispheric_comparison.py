@@ -25,7 +25,7 @@ from numba import njit
 from scipy.optimize import minimize
 
 # import distance modulus from cosmology.py
-from cosmographic_analysis.cosmology import mu
+from cosmographic_analysis.cosmology import mu_model
 
 try:
     import cupy as cp
@@ -46,26 +46,26 @@ from cosmographic_analysis.covariance import (
 
 
 @njit(cache=True)
-def _chi2_1par(theta_val, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0):
+def _chi2_1par(theta_val, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model=0):
     """Chi2 for 1-parameter fit. fit_h0=True fits h0, False fits q0."""
     if fit_h0:
-        mu_model = mu(z, theta_val, theta_fixed)
+        model_mu = mu_model(z, theta_val, theta_fixed, model)
     else:
-        mu_model = mu(z, theta_fixed, theta_val)
+        model_mu = mu_model(z, theta_fixed, theta_val, model)
 
     resid = np.empty(len(z))
     for i in range(len(z)):
         if hostyn[i] == 1:
-            resid[i] = mu_ceph[i] - mu_model[i]
+            resid[i] = mu_ceph[i] - model_mu[i]
         else:
-            resid[i] = mu_sh0es[i] - mu_model[i]
+            resid[i] = mu_sh0es[i] - model_mu[i]
 
     Ar = np.dot(resid, np.dot(inv_cov, resid))
     return Ar
 
 
 @njit(cache=True)
-def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b, tol=1e-6):
+def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b, tol=1e-6, model=0):
     """Golden section search for 1-parameter fit. Returns (optimum, error)."""
     phi = (np.sqrt(5) - 1) / 2
 
@@ -74,8 +74,8 @@ def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b
 
     c = b - phi * (b - a)
     d = a + phi * (b - a)
-    fc = _chi2_1par(c, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
-    fd = _chi2_1par(d, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
+    fc = _chi2_1par(c, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
+    fd = _chi2_1par(d, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
 
     while abs(b - a) > tol:
         if fc < fd:
@@ -83,21 +83,21 @@ def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b
             d = c
             fd = fc
             c = b - phi * (b - a)
-            fc = _chi2_1par(c, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
+            fc = _chi2_1par(c, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
         else:
             a = c
             c = d
             fc = fd
             d = a + phi * (b - a)
-            fd = _chi2_1par(d, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
+            fd = _chi2_1par(d, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
 
     x_opt = (a + b) / 2.0
 
     # Error via central difference on chi2 at minimum
     h = max(tol * 10, abs(x_opt) * 1e-4)
-    fp = _chi2_1par(x_opt + h, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
-    fm = _chi2_1par(x_opt - h, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
-    f0 = _chi2_1par(x_opt, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0)
+    fp = _chi2_1par(x_opt + h, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
+    fm = _chi2_1par(x_opt - h, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
+    f0 = _chi2_1par(x_opt, z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, model)
     hessian = (fp - 2 * f0 + fm) / (h * h)
     error = np.sqrt(2.0 / hessian) if hessian > 0 else 1.0
 
@@ -107,7 +107,7 @@ def _golden_fit(z, mu_ceph, mu_sh0es, hostyn, inv_cov, theta_fixed, fit_h0, a, b
 # ---- Generic chi2 for n-D optimization (scipy fallback) ----
 
 
-def _fit_hemisphere_scipy(z, mu_ceph, mu_sh0es, hostyn, inv_cov, h0f, q0f, free_mask):
+def _fit_hemisphere_scipy(z, mu_ceph, mu_sh0es, hostyn, inv_cov, h0f, q0f, free_mask, model=0):
     """Fit using scipy.minimize. free_mask[0]=fit h0, free_mask[1]=fit q0."""
     n_free = int(free_mask[0]) + int(free_mask[1])
     if n_free == 0:
@@ -128,7 +128,7 @@ def _fit_hemisphere_scipy(z, mu_ceph, mu_sh0es, hostyn, inv_cov, h0f, q0f, free_
         h0 = theta[idx] if free_mask[0] else h0f
         idx = idx + 1 if free_mask[0] else idx
         q0 = theta[idx] if free_mask[1] else q0f
-        mu_model = mu(z, h0, q0)
+        mu_model = mu_model(z, h0, q0, model)
         resid = np.empty(len(z))
         for i in range(len(z)):
             resid[i] = (mu_ceph[i] - mu_model[i]) if hostyn[i] == 1 else (mu_sh0es[i] - mu_model[i])
@@ -190,7 +190,7 @@ def precompute_hemisphere_data(
     n_workers: int = 1,
     cov_numpy: np.ndarray | None = None,
 ) -> dict:
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, _ = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, _, _ = datos
     if cov_numpy is None:
         cov_numpy = datos[9]
     n = len(healpix_dirs)
@@ -381,10 +381,26 @@ def gpu_batch_cholesky_hemispheres(
 # ---- GPU grid search (batched chi² via single GPU matmul) ----
 
 
+def _inner_gpu(y, q0, model):
+    """Model-dependent inner factor: mu = 5*log10((c/h0)*inner) + 25.
+
+    Mirrors dl_model's inner formulas exactly (all models keep the
+    (c/h0)*inner factorization so the analytical-h0 shortcut applies).
+    """
+    if model == 1:
+        return y / (1.0 - (3.0 - q0) * y / 2.0)
+    if model == 2:
+        f2 = (3.0 - q0) / 2.0
+        f3 = (10.0 - 5.0 * q0 + 3.0 * q0 * q0) / 6.0
+        return y * (1.0 + (f2 - f3 / f2) * y) / (1.0 - (f3 / f2) * y)
+    return y + (3.0 - q0) * y * y / 2.0
+
+
 def _mu_grid_gpu(
     z_2d: "cp.ndarray",
     h0: "cp.ndarray",
     q0: "cp.ndarray",
+    model: int = 0,
 ) -> "cp.ndarray":
     """Distance modulus on GPU with broadcasting for the grid.
 
@@ -395,7 +411,7 @@ def _mu_grid_gpu(
     For q0 fit: call with h0=scalar, q0=(n_grid,1)
     """
     y = z_2d / (z_2d + 1.0)
-    dl_val = (2997.92458 / h0) * (y + (3.0 - q0) * y * y / 2.0)
+    dl_val = (2997.92458 / h0) * _inner_gpu(y, q0, model)
     return 5.0 * cp.log10(dl_val) + 25.0
 
 
@@ -590,7 +606,7 @@ def _exec_map_numba_gpu_grid(
         analytical_h0: If True (default), exact closed-form h0 solution.
 
     """
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
     # 1. Hemisphere split
@@ -620,26 +636,27 @@ def _exec_map_numba_gpu_grid(
 
     if analytical_h0:
         # b = mu_obs - A where A is the h0-independent part of mu.
-        # mu(h0, q0f, z) = 5*log10(c/h0 * (y + (3-q0f)*y²/2)) + 25
-        #                 = [5*log10(c) + 5*log10(y + (3-q0f)*y²/2) + 25] - 5*log10(h0)
+        # mu(h0, q0f, z) = 5*log10(c/h0 * inner(y, q0f)) + 25
+        #                 = [5*log10(c) + 5*log10(inner(y, q0f)) + 25] - 5*log10(h0)
         #                 = A - 5*log10(h0)
         # r(h0) = mu_obs - mu(h0) = (mu_obs - A) + 5*log10(h0) = b + α·1
         # chi²(α) = (b+α·1)^T C⁻¹ (b+α·1) is QUADRATIC in α → exact minimum
+        # (valid for every model: all keep the (c/h0)·inner factorization)
         y_gpu = z_gpu / (z_gpu + 1.0)
-        inner = y_gpu + (3.0 - cp.float64(q0f)) * y_gpu * y_gpu / 2.0
+        inner = _inner_gpu(y_gpu, cp.float64(q0f), model)
         A_gpu = 5.0 * cp.log10(cp.float64(2997.92458) * inner) + 25.0
         b_gpu = mu_obs_gpu - A_gpu
     else:
         h0_grid_np = np.linspace(0.3, 1.5, n_grid, dtype=np.float64)
         z_2d_h0 = z_gpu[None, :]
         h0_2d = cp.array(h0_grid_np)[:, None]
-        mu_h0 = _mu_grid_gpu(z_2d_h0, h0_2d, cp.float64(q0f))
+        mu_h0 = _mu_grid_gpu(z_2d_h0, h0_2d, cp.float64(q0f), model)
         resid_h0 = mu_obs_gpu[None, :] - mu_h0
 
     # 5. Precompute q0 model grid
     z_2d = z_gpu[None, :]
     q0_2d = cp.array(q0_grid_np)[:, None]
-    mu_q0 = _mu_grid_gpu(z_2d, cp.float64(h0f), q0_2d)
+    mu_q0 = _mu_grid_gpu(z_2d, cp.float64(h0f), q0_2d, model)
     resid_q0 = mu_obs_gpu[None, :] - mu_q0
 
     # 6. Result arrays
@@ -820,7 +837,7 @@ def _exec_map_numba_woodbury(
     if not HAVE_CUPY:
         raise ImportError("Woodbury path requires CuPy for q₀ grid search")
 
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
     method = "woodbury" if use_woodbury_chi2 else "woodbury-cholesky"
 
@@ -876,7 +893,7 @@ def _exec_map_numba_woodbury(
 
     # ---- b = mu_obs - A(z, q0f) for analytical h₀ ----
     y_gpu = z_gpu / (z_gpu + 1.0)
-    inner = y_gpu + (3.0 - cp.float64(q0f)) * y_gpu * y_gpu / 2.0
+    inner = _inner_gpu(y_gpu, cp.float64(q0f), model)
     A_gpu = 5.0 * cp.log10(cp.float64(2997.92458) * inner) + 25.0
     b_gpu = mu_obs_gpu - A_gpu
     b_cpu = cp.asnumpy(b_gpu)
@@ -884,7 +901,7 @@ def _exec_map_numba_woodbury(
     # ---- q₀ model grid on GPU ----
     z_2d = z_gpu[None, :]
     q0_2d = cp.array(q0_grid_np)[:, None]
-    mu_q0 = _mu_grid_gpu(z_2d, cp.float64(h0f), q0_2d)
+    mu_q0 = _mu_grid_gpu(z_2d, cp.float64(h0f), q0_2d, model)
     resid_q0 = mu_obs_gpu[None, :] - mu_q0
 
     # ---- Pre-transfer V, D_inv to GPU (avoid per-direction cp.asarray in loop) ----
@@ -1018,7 +1035,7 @@ def _exec_map_numba_gpu(healpix_dirs, datos, save, method):
     """
     if method == "scipy":
         print("  [GPU] Warning: scipy method not available on GPU, using golden section.")
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
     direction_indices = []
@@ -1056,10 +1073,10 @@ def _exec_map_numba_gpu(healpix_dirs, datos, save, method):
         hostyn_up = hostyn[upi].astype(np.int64)
         hostyn_down = hostyn[downi].astype(np.int64)
 
-        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
-        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
-        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
-        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5, model=model)
+        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5, model=model)
+        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5, model=model)
+        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5, model=model)
 
         results_h0_u[idx] = h0u
         results_h0_d[idx] = h0d
@@ -1111,6 +1128,7 @@ def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple, method: str = "go
     cov_numpy = datos[9]
     q0f = datos[5]
     h0f = datos[4]
+    model = datos[10]
 
     dot_products = np.dot(v1, healpix_vec)
     mask_up = dot_products >= 0
@@ -1137,15 +1155,15 @@ def multi_hem_map_numba(healpix_vec: np.ndarray, datos: tuple, method: str = "go
             if method not in _WARNED_GPU_FALLBACK:
                 _WARNED_GPU_FALLBACK.add(method)
                 print(f"  [CPU] Warning: method='{method}' requires GPU, falling back to golden section.")
-        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
-        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
-        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
-        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5, model=model)
+        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5, model=model)
+        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5, model=model)
+        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5, model=model)
     elif method == "scipy":
-        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False))
-        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False))
-        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True))
-        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True))
+        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False), model)
+        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False), model)
+        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True), model)
+        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True), model)
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -1167,7 +1185,7 @@ def exec_map_numba(healpix_dirs: np.ndarray, datos: tuple, save=None, pool: Pool
                        Only used when method='grid'.
 
     """
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
     if HAVE_CUPY and n_workers <= 1 and pool is None:
@@ -1225,7 +1243,8 @@ def multi_hem_map_fixed_numba(healpix_vec: np.ndarray, dir_idx: int, datos: tupl
                 fall back to golden section on CPU), or 'scipy'.
 
     """
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, _ = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, _, _ = datos
+    model = datos[10]
     pc = precomputed[dir_idx]
 
     hostyn_up = hostyn[pc["up_indices"]].astype(np.int64)
@@ -1245,15 +1264,15 @@ def multi_hem_map_fixed_numba(healpix_vec: np.ndarray, dir_idx: int, datos: tupl
             if method not in _WARNED_GPU_FALLBACK:
                 _WARNED_GPU_FALLBACK.add(method)
                 print(f"  [CPU] Warning: method='{method}' requires GPU, falling back to golden section.")
-        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5)
-        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5)
-        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5)
-        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5)
+        h0u, h0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, q0f, True, 0.3, 1.5, model=model)
+        h0d, h0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, q0f, True, 0.3, 1.5, model=model)
+        q0u, q0u_err = _golden_fit(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, False, -1.5, 0.5, model=model)
+        q0d, q0d_err = _golden_fit(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, False, -1.5, 0.5, model=model)
     elif method == "scipy":
-        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False))
-        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False))
-        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True))
-        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True))
+        h0u, _, h0u_err, _ = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (True, False), model)
+        h0d, _, h0d_err, _ = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (True, False), model)
+        _, q0u, _, q0u_err = _fit_hemisphere_scipy(z_up, muceph_up, mu_sh0es_up, hostyn_up, inv_cov_up, h0f, q0f, (False, True), model)
+        _, q0d, _, q0d_err = _fit_hemisphere_scipy(z_down, muceph_down, mu_sh0es_down, hostyn_down, inv_cov_down, h0f, q0f, (False, True), model)
     else:
         raise ValueError(f"Unknown method: {method}")
 
@@ -1266,7 +1285,7 @@ def exec_map_fixed_numba(healpix_dirs: np.ndarray, datos: tuple, precomputed: di
     GPU methods (woodbury, woodbury-cholesky, grid) route directly to the
     GPU functions — the precomputed data is only used for CPU fallbacks.
     """
-    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy = datos
+    r1, v1, hostyn, cov_mat, h0f, q0f, pts, zup, zdown, cov_numpy, model = datos
     n = len(healpix_dirs)
 
     if HAVE_CUPY and n_workers <= 1 and pool is None:

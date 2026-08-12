@@ -37,6 +37,7 @@ import healpy as hp
 from cosmographic_analysis.config import load_config, ensure_output_dirs
 from cosmographic_analysis.data_loader import load_pantheon_data, build_datos_tuple
 from cosmographic_analysis.coordinates import get_healpix_vectors, IndexToDecRa
+from cosmographic_analysis.cosmology import mu_model, MODEL_CODES
 from cosmographic_analysis.hemispheric_comparison import (
     exec_map_numba,
     exec_map_fixed_numba,
@@ -264,6 +265,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
     cfg = load_config(config_path)
     zup = cfg.parameters.zup
     zdown = cfg.parameters.zdown
+    model_code = MODEL_CODES[cfg.parameters.model]
 
     print("\n  Loading data...")
     with measure("Data loading"):
@@ -275,7 +277,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
 
     datos = build_datos_tuple(
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
-        cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy,
+        cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
     )
     r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
 
@@ -339,8 +341,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
 
     # A5: LCDM simulation
     print(f"\n  Running LCDM simulation ({bcfg.repetitions} reps)...")
-    from cosmographic_analysis.cosmology import mu
-    mu_fid = np.array([mu(zi, cfg.parameters.h0f, cfg.parameters.q0f) for zi in zz])
+    mu_fid = np.array([mu_model(zi, cfg.parameters.h0f, cfg.parameters.q0f, model_code) for zi in zz])
     r1_lcdm = np.tile(r1, (bcfg.repetitions, 1, 1))
     sigmuz_arr = np.array(sigmuz) if isinstance(sigmuz, list) else sigmuz
     for i in range(bcfg.repetitions):
@@ -352,7 +353,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
         for i in range(bcfg.repetitions):
             datos_lcdm = [r1_lcdm[i], v1, hostyn_arr, cov_mat,
                           cfg.parameters.h0f, cfg.parameters.q0f,
-                          pts, zup, zdown, cov_numpy]
+                          pts, zup, zdown, cov_numpy, model_code]
             res_h0, res_q0 = exec_map_fixed_numba(
                 healpix_dirs, tuple(datos_lcdm), lcdm_precomputed,
                 n_workers=1, method=bcfg.optimizer,
@@ -616,13 +617,14 @@ def phase_c_profile(bcfg: BenchmarkConfig):
     cfg = load_config(bcfg.config)
     zup = cfg.parameters.zup
     zdown = cfg.parameters.zdown
+    model_code = MODEL_CODES[cfg.parameters.model]
 
     zz, mz, sigmz, muz, sigmuz, ra, dec, muceph, hostyn, cov_mat, inv_cov_z, cov_numpy = \
         load_pantheon_data(cfg.data.lcparam, cfg.data.cov_matrix, zup, zdown)
     pts = hp.nside2npix(bcfg.nside)
     datos = build_datos_tuple(
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
-        cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy,
+        cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
     )
     r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
     healpix_dirs = get_healpix_vectors(bcfg.nside)
@@ -696,6 +698,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
     cfg = load_config(bcfg.config)
     zup = cfg.parameters.zup
     zdown = cfg.parameters.zdown
+    model_code = MODEL_CODES[cfg.parameters.model]
 
     # Load data once
     zz, mz, sigmz, muz, sigmuz, ra, dec, muceph, hostyn, cov_mat, inv_cov_z, cov_numpy = \
@@ -710,7 +713,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
         pts = hp.nside2npix(nside)
         datos = build_datos_tuple(
             ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
-            cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy,
+            cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
         )
         r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
         healpix_dirs = get_healpix_vectors(nside)
@@ -753,8 +756,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
             lcdm_pre = precompute_hemisphere_data(
                 healpix_dirs, datos, n_workers=actual_workers, cov_numpy=cov_numpy,
             )
-            from cosmographic_analysis.cosmology import mu
-            mu_fid = np.array([mu(zi, cfg.parameters.h0f, cfg.parameters.q0f)
+            mu_fid = np.array([mu_model(zi, cfg.parameters.h0f, cfg.parameters.q0f, model_code)
                               for zi in zz])
             lcdm_times = []
             for _ in range(3):
@@ -763,7 +765,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
                 r1_it[:, 5] = mu_sample
                 datos_lcdm = [r1_it, v1, hostyn_arr, cov_mat,
                               cfg.parameters.h0f, cfg.parameters.q0f,
-                              pts, zup, zdown, cov_numpy]
+                              pts, zup, zdown, cov_numpy, model_code]
                 t0 = time.perf_counter()
                 exec_map_fixed_numba(healpix_dirs, tuple(datos_lcdm),
                                      lcdm_pre, n_workers=1, method="golden")
