@@ -128,10 +128,10 @@ def _fit_hemisphere_scipy(z, mu_ceph, mu_sh0es, hostyn, inv_cov, h0f, q0f, free_
         h0 = theta[idx] if free_mask[0] else h0f
         idx = idx + 1 if free_mask[0] else idx
         q0 = theta[idx] if free_mask[1] else q0f
-        mu_model = mu_model(z, h0, q0, model)
+        model_mu = mu_model(z, h0, q0, model)
         resid = np.empty(len(z))
         for i in range(len(z)):
-            resid[i] = (mu_ceph[i] - mu_model[i]) if hostyn[i] == 1 else (mu_sh0es[i] - mu_model[i])
+            resid[i] = (mu_ceph[i] - model_mu[i]) if hostyn[i] == 1 else (mu_sh0es[i] - model_mu[i])
         return np.dot(resid, np.dot(inv_cov, resid))
 
     res = minimize(chi2_func, x0, method="L-BFGS-B", bounds=bounds)

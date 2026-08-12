@@ -143,3 +143,37 @@ def test_multi_hem_map_fixed_numba_accepts_woodbury_cholesky():
     assert exc is None or 'Unknown method' not in str(exc), \
         f"multi_hem_map_fixed_numba rejected 'woodbury-cholesky': {exc}"
     del datos
+
+
+def test_scipy_fitter_runs_and_joint_fit_finite():
+    """The CPU scipy optimizer path actually executes and returns finite fits.
+
+    Regression: chi2_func shadowed the global mu_model with its local name,
+    raising UnboundLocalError whenever the scipy path ran (GPU routing
+    silently falls back to golden, so GPU smokes never caught it).
+    """
+    from cosmographic_analysis.hemispheric_comparison import (
+        _fit_hemisphere_scipy,
+        multi_hem_map_numba,
+    )
+    n = 8
+    r1 = np.zeros((n, 9), dtype=np.float64)
+    r1[:, 2] = np.linspace(0.02, 0.09, n)  # z
+    r1[:, 5] = 40.0  # mu_sh0es
+    r1[:, 7] = 40.0  # muceph
+    v1 = np.random.randn(n, 3).astype(np.float64)
+    hostyn = np.zeros(n, dtype=np.int64)
+    cov = np.eye(n, dtype=np.float64)
+    datos = (r1, v1, hostyn, None, 0.7, -0.5, 12, 0.1, 0.01, cov, 0)
+
+    # pipeline protocol: two conditional single-parameter fits
+    res = multi_hem_map_numba(np.array([0.0, 0.0, 1.0]), datos, method='scipy')
+    assert len(res) == 8
+    assert all(np.isfinite(x) for x in res), res
+
+    # joint 2-parameter fit (h0 and q0 free simultaneously) also runs
+    h0, q0, h0_err, q0_err = _fit_hemisphere_scipy(
+        r1[:, 2], r1[:, 7], r1[:, 5], hostyn, cov, 0.7, -0.5, (True, True)
+    )
+    assert np.isfinite(h0) and np.isfinite(q0)
+    assert np.isfinite(h0_err) and np.isfinite(q0_err)
