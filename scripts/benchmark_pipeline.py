@@ -279,7 +279,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
         cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
     )
-    r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
+    r1, v1, hostyn_arr, _, _, _, _, _, _, _, _ = datos
 
     # HEALPix vectors
     with measure("HEALPix initialization"):
@@ -325,7 +325,7 @@ def phase_a_pipeline_timing(bcfg: BenchmarkConfig, config_path: str):
         for i in range(bcfg.repetitions):
             datos_iso = [r1, v1_iso[i], hostyn_arr, cov_mat,
                          cfg.parameters.h0f, cfg.parameters.q0f,
-                         pts, zup, zdown, cov_numpy]
+                         pts, zup, zdown, cov_numpy, model_code]
             res_h0, res_q0 = exec_map_numba(
                 healpix_dirs, tuple(datos_iso), n_workers=1, method=bcfg.optimizer,
             )
@@ -626,7 +626,7 @@ def phase_c_profile(bcfg: BenchmarkConfig):
         ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
         cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
     )
-    r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
+    r1, v1, hostyn_arr, _, _, _, _, _, _, _, _ = datos
     healpix_dirs = get_healpix_vectors(bcfg.nside)
 
     warmup_numba()
@@ -636,7 +636,7 @@ def phase_c_profile(bcfg: BenchmarkConfig):
     vecti /= np.linalg.norm(vecti, axis=1)[:, np.newaxis]
     datos_iso = [r1, vecti, hostyn_arr, cov_mat,
                  cfg.parameters.h0f, cfg.parameters.q0f,
-                 pts, zup, zdown, cov_numpy]
+                 pts, zup, zdown, cov_numpy, model_code]
 
     prof_file = ".omo/evidence/benchmark-pipeline/phase_c_profile.prof"
     print(f"  Profiling single ISO iteration...")
@@ -715,7 +715,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
             ra, dec, zz, mz, sigmz, muz, sigmuz, muceph, hostyn,
             cov_mat, cfg.parameters.h0f, cfg.parameters.q0f, pts, zup, zdown, cov_numpy, model_code,
         )
-        r1, v1, hostyn_arr, _, _, _, _, _, _, _ = datos
+        r1, v1, hostyn_arr, _, _, _, _, _, _, _, _ = datos
         healpix_dirs = get_healpix_vectors(nside)
 
         print(f"\n  --- nside={nside} ({n_dirs} directions) ---")
@@ -745,7 +745,7 @@ def phase_d_scaling(bcfg: BenchmarkConfig):
                 vecti /= np.linalg.norm(vecti, axis=1)[:, np.newaxis]
                 datos_iso = [r1, vecti, hostyn_arr, cov_mat,
                              cfg.parameters.h0f, cfg.parameters.q0f,
-                             pts, zup, zdown, cov_numpy]
+                             pts, zup, zdown, cov_numpy, model_code]
                 t0 = time.perf_counter()
                 exec_map_numba(healpix_dirs, tuple(datos_iso),
                                n_workers=1, method="golden")

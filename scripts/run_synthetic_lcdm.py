@@ -48,19 +48,37 @@ def run_lcdm(config_path: str, n_workers: int = 1, optimizer: str = 'woodbury'):
         mu_sample = np.random.normal(mu_fid, sigmuz)
         r1_lcdm[i, :, 5] = mu_sample
 
+    # Parallel setup: exec_map_numba parallelizes internally via a pool
+    # (spawn context for GPU methods, fork otherwise — mirrors run_pipeline)
+    if n_workers > 1:
+        from multiprocessing import get_context
+        n_workers = min(n_workers, 8, os.cpu_count() or 8)
+        if optimizer in ('grid', 'woodbury', 'woodbury-cholesky'):
+            pool = get_context('spawn').Pool(n_workers)
+        else:
+            from multiprocessing import Pool
+            pool = Pool(n_workers)
+        print(f"  Using pool of {n_workers} workers")
+    else:
+        pool = None
+
     h0um, h0dm, q0um, q0dm = [], [], [], []
     for i, r1_it in enumerate(r1_lcdm):
         if i == 0 or (i + 1) % 50 == 0 or i == p.repetitions - 1:
             print(f"  [{i+1}/{p.repetitions}]")
         datos_lcdm = [r1_it, v1, hostyn, cov_mat, p.h0f, p.q0f, pts, p.zup, p.zdown, cov_numpy, model_code]
-        res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), n_workers=n_workers, method=optimizer)
+        res_h0, res_q0 = exec_map_numba(healpix_dirs, tuple(datos_lcdm), pool=pool, n_workers=n_workers, method=optimizer)
         h0um.append(np.array(res_h0[0]))
         h0dm.append(np.array(res_h0[1]))
         q0um.append(np.array(res_q0[0]))
         q0dm.append(np.array(res_q0[1]))
 
-    h0m = np.concatenate(h0um + h0dm, axis=1)
-    q0m = np.concatenate(q0um + q0dm, axis=1)
+    if pool is not None:
+        pool.close()
+        pool.join()
+
+    h0m = np.concatenate([np.array(h0um), np.array(h0dm)], axis=1)
+    q0m = np.concatenate([np.array(q0um), np.array(q0dm)], axis=1)
     delta_h0_max = np.max(h0m, axis=1) - np.min(h0m, axis=1)
     delta_q0_max = np.max(q0m, axis=1) - np.min(q0m, axis=1)
 
