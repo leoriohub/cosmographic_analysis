@@ -6,23 +6,11 @@ Thresholds grounded on noiseless ΛCDM fits this session:
 - pade21 pole minimum over q0 ∈ [−1.5, 0.5]: z = 1.256
 """
 import numpy as np
-from scipy.integrate import quad
 from scipy.optimize import least_squares
 
 from cosmographic_analysis.cosmology import dl, dl_model, mu, mu_model
 from cosmographic_analysis.config import ParametersConfig, load_config
-
-C = 299792.458  # km/s
-
-
-def dl_lcdm_exact(z, Om=0.3, H0=70.0):
-    """Exact flat ΛCDM luminosity distance (Mpc)."""
-    integ = quad(lambda zp: 1.0 / np.sqrt(Om * (1 + zp) ** 3 + (1 - Om)), 0, z)[0]
-    return (C / H0) * (1 + z) * integ
-
-
-def mu_lcdm_exact(z, Om=0.3, H0=70.0):
-    return 5.0 * np.log10(dl_lcdm_exact(z, Om, H0)) + 25.0
+from cosmographic_analysis.truncation import dl_lcdm_exact, mu_lcdm_exact
 
 
 def test_model0_equals_mu():
