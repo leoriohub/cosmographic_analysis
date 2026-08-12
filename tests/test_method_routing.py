@@ -177,3 +177,25 @@ def test_scipy_fitter_runs_and_joint_fit_finite():
     )
     assert np.isfinite(h0) and np.isfinite(q0)
     assert np.isfinite(h0_err) and np.isfinite(q0_err)
+
+
+def test_exec_map_numba_scipy_never_routes_to_gpu():
+    """method='scipy' must run the real scipy fit, never GPU golden fallback."""
+    from cosmographic_analysis.hemispheric_comparison import exec_map_numba
+    with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_gpu') as mock_gpu, \
+         patch('cosmographic_analysis.hemispheric_comparison.multi_hem_map_numba') as mock_multi:
+        mock_multi.return_value = (0.7, 0.7, 0.1, 0.1, -0.5, -0.5, 0.2, 0.2)
+        exec_map_numba(_DIRS, (None,) * 11, method='scipy')
+        mock_gpu.assert_not_called()
+        assert mock_multi.call_count == len(_DIRS)
+
+
+def test_exec_map_fixed_numba_scipy_never_routes_to_gpu():
+    """Fixed-map scipy runs the real scipy fit, never GPU golden fallback."""
+    from cosmographic_analysis.hemispheric_comparison import exec_map_fixed_numba
+    with patch('cosmographic_analysis.hemispheric_comparison._exec_map_numba_gpu') as mock_gpu, \
+         patch('cosmographic_analysis.hemispheric_comparison.multi_hem_map_fixed_numba') as mock_multi:
+        mock_multi.return_value = (0.7, 0.7, 0.1, 0.1, -0.5, -0.5, 0.2, 0.2)
+        exec_map_fixed_numba(_DIRS, (None,) * 11, {}, method='scipy')
+        mock_gpu.assert_not_called()
+        assert mock_multi.call_count == len(_DIRS)

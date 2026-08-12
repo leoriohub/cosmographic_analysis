@@ -2,7 +2,7 @@ from typing import Tuple
 import numpy as np
 
 # import distance modulus from cosmology.py
-from cosmographic_analysis.cosmology import mu
+from cosmographic_analysis.cosmology import mu_model
 
 
 def entire_dw(datos: Tuple):
@@ -21,6 +21,7 @@ def entire_dw(datos: Tuple):
     hostyn = datos[2]
     h0f = datos[4]
     q0f = datos[5]
+    model = datos[10]
 
     # Extract redshifts and ensure they are floats
     redshift = r1[:, 2].astype(float)
@@ -32,13 +33,13 @@ def entire_dw(datos: Tuple):
     mu_sh0es = r1[:, 5]
     muceph = r1[:, 7]
 
-    mu_model = mu(redshift, h0f, q0f)
+    model_mu = mu_model(redshift, h0f, q0f, model)
 
     # Calculate residuals
     resid = np.zeros(len(r1))
 
-    resid[hostyn] = muceph[hostyn] - mu_model[hostyn]
-    resid[~hostyn] = mu_sh0es[~hostyn] - mu_model[~hostyn]
+    resid[hostyn] = muceph[hostyn] - model_mu[hostyn]
+    resid[~hostyn] = mu_sh0es[~hostyn] - model_mu[~hostyn]
 
     # Calculate differences and dw statistics
     diff = np.diff(resid)
@@ -65,6 +66,7 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
     hostyn = datos[2]
     h0f = datos[4]
     q0f = datos[5]
+    model = datos[10]
     
 
     cos_angle = np.dot(v1, healpix_dir)
@@ -93,19 +95,19 @@ def hemispheric_dw(healpix_dir: np.ndarray, datos: Tuple):
     mu_sh0es_down = down_data[:, 5]
     muceph_down = down_data[:, 7]
 
-    mu_model_up = mu(up_redshift, h0f, q0f)
-    mu_model_down = mu(down_redshift, h0f, q0f)
+    model_mu_up = mu_model(up_redshift, h0f, q0f, model)
+    model_mu_down = mu_model(down_redshift, h0f, q0f, model)
 
     # Calculate residuals
     resid_up = np.zeros(len(up_data))
 
-    resid_up[up_hostyn] =  muceph_up[up_hostyn] - mu_model_up[up_hostyn]
-    resid_up[~up_hostyn] = mu_sh0es_up[~up_hostyn] - mu_model_up[~up_hostyn]
+    resid_up[up_hostyn] =  muceph_up[up_hostyn] - model_mu_up[up_hostyn]
+    resid_up[~up_hostyn] = mu_sh0es_up[~up_hostyn] - model_mu_up[~up_hostyn]
 
     resid_down = np.zeros(len(down_data))
 
-    resid_down[down_hostyn] = muceph_down[down_hostyn] - mu_model_down[down_hostyn]
-    resid_down[~down_hostyn] = mu_sh0es_down[~down_hostyn] - mu_model_down[~down_hostyn]
+    resid_down[down_hostyn] = muceph_down[down_hostyn] - model_mu_down[down_hostyn]
+    resid_down[~down_hostyn] = mu_sh0es_down[~down_hostyn] - model_mu_down[~down_hostyn]
 
     # Calculate differences and dw statistics
     diff_up = np.diff(resid_up)
